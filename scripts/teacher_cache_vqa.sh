@@ -13,7 +13,7 @@ TRAIN_SCRIPT="teacher_cache.py"
 
 SUBSETS=(
   # "ImageNet_1K" "N24News" "HatefulMemes" "VOC2007" "SUN397"
-  "OK-VQA" "A-OKVQA" "DocVQA" "InfographicsVQA" "ChartQA"
+  "OK-VQA" "A-OKVQA" "DocVQA" "InfographicsVQA" "ChartQA" "Visual7W"
 )
 
 # =========================================================================

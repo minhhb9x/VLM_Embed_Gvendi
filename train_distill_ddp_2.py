@@ -27,6 +27,7 @@ from transformers.integrations import HfDeepSpeedConfig
 
 import random
 import numpy as np
+import itertools
 
 def seed_everything(seed: int, rank: int = 0):
     seed = seed + rank  # quan trọng trong DDP
@@ -41,12 +42,12 @@ def seed_everything(seed: int, rank: int = 0):
     torch.cuda.manual_seed_all(seed)
 
     # Nếu bạn muốn deterministic (chậm hơn, đôi khi lỗi với một số ops)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
 
     # Bắt buộc với một số ops CUDA mới (matmul, conv...)
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    torch.use_deterministic_algorithms(True)
+    # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    # torch.use_deterministic_algorithms(True)
 
 def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
@@ -228,7 +229,7 @@ class Trainer:
                 
                 student = self.distiller.module.student
                 student.encoder.save_pretrained(ckpt_dir)
-                if self.model_args.model_backbone in ["llava_onevision", "llava_two_vision"]:
+                if self.model_args.model_backbone in ["llava_onevision", "llava_two_vision", "llava_onevision_old"]:
                     torch.save(student.encoder.model.multi_modal_projector.state_dict(), projector_dir)
                 else:
                     # if hasattr(student.encoder.model.model, 'mm_projector'):
@@ -258,7 +259,7 @@ class Trainer:
             os.makedirs(final_ckpt_dir, exist_ok=True)
             student = self.distiller.module.student
             student.encoder.save_pretrained(final_ckpt_dir)
-            if self.model_args.model_backbone in ["llava_onevision", "llava_two_vision"]:
+            if self.model_args.model_backbone in ["llava_onevision", "llava_two_vision", "llava_onevision_old"]:
                 torch.save(student.encoder.model.multi_modal_projector.state_dict(), projector_dir)
             else:
                 # if hasattr(student.encoder.model.model, 'mm_projector'):
@@ -295,7 +296,7 @@ def main():
     training_args: TrainingArguments
     
     rank = dist.get_rank()
-    # seed_everything(training_args.seed, rank=rank) 
+    seed_everything(training_args.seed, rank=rank) 
     
     distiller = Distiller(model_args, training_args)
     train_dataset = prepare_dataset(data_args, model_args)
@@ -324,9 +325,6 @@ def main():
         if "mm_projector" in n or "multi_modal_projector" in n:
             p.requires_grad = True
             
-        if "mm_projector" in n or "multi_modal_projector" in n:
-            p.requires_grad = True
-            
         if "lm_head" in n:
             p.requires_grad = False
         if p.requires_grad:
@@ -334,8 +332,14 @@ def main():
             num_trainable_vision += p.numel()
     print_rank(f"Number of trainable vision parameters: {num_trainable_vision}")
     
-    optimizer = AdamW(
+    criterion = build_criterion(training_args)
+    trainable_params = itertools.chain(
         distiller.student.parameters(),
+        criterion.parameters()
+    )
+    
+    optimizer = AdamW(
+        trainable_params,
         lr=training_args.learning_rate,
         weight_decay=training_args.weight_decay,
         betas=(0.9, 0.999),
@@ -369,7 +373,7 @@ def main():
             optimizer,
             num_warmup_steps=training_args.warmup_ratio * total_steps,
         )
-    criterion = build_criterion(training_args)
+    
     trainer = Trainer(distiller, train_dataloader, optimizer, lr_scheduler, criterion, 
                       model_args, training_args, data_args)
     trainer.train()

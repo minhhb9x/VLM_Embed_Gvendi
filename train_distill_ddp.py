@@ -24,6 +24,7 @@ from accelerate import Accelerator
 from huggingface_hub import HfApi, HfFolder, Repository, create_repo
 from transformers import AutoConfig, AutoProcessor, AutoTokenizer, HfArgumentParser
 from transformers.integrations import HfDeepSpeedConfig
+import itertools
 # Todo
 
 import random
@@ -268,7 +269,7 @@ class Trainer:
                 
                 student = self.distiller.module.student
                 student.encoder.save_pretrained(ckpt_dir)
-                if self.model_args.model_backbone in ["llava_onevision", "llava_two_vision"]:
+                if self.model_args.model_backbone in ["llava_onevision", "llava_two_vision", "llava_onevision_old"]:
                     torch.save(student.encoder.model.multi_modal_projector.state_dict(), projector_dir)
                 else:
                     # if hasattr(student.encoder.model.model, 'mm_projector'):
@@ -298,7 +299,7 @@ class Trainer:
             os.makedirs(final_ckpt_dir, exist_ok=True)
             student = self.distiller.module.student
             student.encoder.save_pretrained(final_ckpt_dir)
-            if self.model_args.model_backbone in ["llava_onevision", "llava_two_vision"]:
+            if self.model_args.model_backbone in ["llava_onevision", "llava_two_vision", "llava_onevision_old"]:
                 torch.save(student.encoder.model.multi_modal_projector.state_dict(), projector_dir)
             else:
                 # if hasattr(student.encoder.model.model, 'mm_projector'):
@@ -376,8 +377,14 @@ def main():
             num_trainable_vision += p.numel()
     print_rank(f"Number of trainable vision parameters: {num_trainable_vision}")
     
-    optimizer = AdamW(
+    criterion = build_criterion(training_args)
+    trainable_params = itertools.chain(
         distiller.student.parameters(),
+        criterion.parameters()
+    )
+
+    optimizer = AdamW(
+        trainable_params,
         lr=training_args.learning_rate,
         weight_decay=training_args.weight_decay,
         betas=(0.9, 0.999),
@@ -411,7 +418,7 @@ def main():
             optimizer,
             num_warmup_steps=training_args.warmup_ratio * total_steps,
         )
-    criterion = build_criterion(training_args)
+
     trainer = Trainer(distiller, train_dataloader, optimizer, lr_scheduler, criterion, 
                       model_args, training_args, data_args)
     trainer.train()
