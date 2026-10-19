@@ -131,7 +131,9 @@ class TrainingArguments(TrainingArguments):
     use_distill_cse_loss: bool = field(default=True, metadata={"help": "Use distill cse loss"})
     use_distill_vison_loss: bool = field(default=True, metadata={"help": "Use distill vison loss"})
     use_sigreg_loss: bool = field(default=True, metadata={"help": "Use sigreg loss"})
+    use_distill_grad_loss: bool = field(default=True, metadata={"help": "Use distill grad loss"})
     sigreg_weight: float = field(default=0.05, metadata={"help": "weight for sigreg loss"})
+    grad_weight: float = field(default=0.1, metadata={"help": "weight for grad loss"})
     num_layers: int = field(default=1, metadata={"help": "Number of layers for sigreg"})
     d_cse_temperature: float = field(default=0.02, metadata={"help": "distill cse temperature for softmax"})
 

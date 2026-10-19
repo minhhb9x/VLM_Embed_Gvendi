@@ -696,8 +696,8 @@ class MMEBModel(nn.Module):
                 print_master("Enabled training for modality gated pooling")
 
             
-            if not is_trainable:
-                lora_model = lora_model.merge_and_unload()
+            # if not is_trainable:
+            #     lora_model = lora_model.merge_and_unload()
 
             model = cls(
                 encoder=lora_model,

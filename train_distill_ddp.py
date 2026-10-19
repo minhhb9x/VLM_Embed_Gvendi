@@ -128,8 +128,8 @@ class Trainer:
             if isinstance(report_to, str):
                 report_to = [report_to]
             
-            if "wandb" in report_to:
-                self.use_wandb = True
+            # if "wandb" in report_to:
+            #     self.use_wandb = True
     
     def _debug_batch_devices(self, obj, prefix=""):
         if obj is None:
@@ -159,7 +159,7 @@ class Trainer:
         losses, contrastive_losses, kd_losses = [], [], []
         kd_rkd_losses, ot_losses, kd_dtw_losses = [], [], []
         kd_mse_losses, kd_penultimate_losses = [], []
-        span_losses, cross_modal_losses = [], []
+        span_losses, cross_modal_losses, grad_losses = [], [], []
         
         # Tính tổng số bước (steps) trong epoch để log step
         steps_per_epoch = len(self.train_data.dataset) // self.training_args.per_device_train_batch_size // self.training_args.gradient_accumulation_steps // dist.get_world_size()
@@ -180,7 +180,7 @@ class Trainer:
             kd_dtw_loss = loss_dict.get('kd_loss_dtw', torch.tensor(0.0))
             kd_mse_loss = loss_dict.get('kd_mse_loss', torch.tensor(0.0))
             kd_penultimate_loss = loss_dict.get('kd_penultimate_loss', torch.tensor(0.0))
-
+            grad_loss = loss_dict.get('grad_loss', torch.tensor(0.0))
             losses.append(loss.detach().item() * self.training_args.gradient_accumulation_steps)
             contrastive_losses.append(contrastive_loss.detach().item())
             kd_losses.append(kd_loss.detach().item())
@@ -191,6 +191,7 @@ class Trainer:
             kd_dtw_losses.append(kd_dtw_loss.detach().item())
             kd_mse_losses.append(kd_mse_loss.detach().item())
             kd_penultimate_losses.append(kd_penultimate_loss.detach().item())
+            grad_losses.append(grad_loss.detach().item())
             
             batch_loss = sum(losses) / len(losses)
             batch_contrastive_loss = sum(contrastive_losses) / len(contrastive_losses)
@@ -202,7 +203,7 @@ class Trainer:
             batch_kd_dtw_loss = sum(kd_dtw_losses) / len(kd_dtw_losses)
             batch_kd_loss_mse = sum(kd_mse_losses) / len(kd_mse_losses)
             batch_kd_penultimate_loss = sum(kd_penultimate_losses) / len(kd_penultimate_losses)
-            
+            batch_grad_loss = sum(grad_losses) / len(grad_losses)
             loss.backward()
             if (batch_idx + 1) % self.training_args.gradient_accumulation_steps == 0:
                 self.optimizer.step()
@@ -215,6 +216,7 @@ class Trainer:
                         'loss': f"{batch_loss:.4f}",
                         'kd_loss': f"{batch_kd_loss:.4f}",
                         'contrastive_loss': f"{batch_contrastive_loss:.4f}",
+                        'grad_loss': f"{batch_grad_loss:.4f}",
                         'kd_rkd_loss': f"{batch_kd_rkd_loss:.4f}",
                         'cross_modal_loss': f"{batch_cross_modal_loss:.4f}",
                         'ot_loss': f"{batch_ot_loss:.4f}",
@@ -238,6 +240,7 @@ class Trainer:
                             "train/kd_dtw_loss": batch_kd_dtw_loss,
                             "train/kd_loss_mse": batch_kd_loss_mse,
                             "train/kd_penultimate_loss": batch_kd_penultimate_loss,
+                            "train/grad_loss": batch_grad_loss,
                             "train/learning_rate": current_lr,
                             "train/epoch": epoch + ((batch_idx + 1) / self.training_args.gradient_accumulation_steps) / steps_per_epoch
                         })
@@ -378,6 +381,8 @@ def main():
     print_rank(f"Number of trainable vision parameters: {num_trainable_vision}")
     
     criterion = build_criterion(training_args)
+    print_rank(f"Number of criterion parameters: {sum(p.numel() for p in criterion.parameters() if p.requires_grad)}")
+
     trainable_params = itertools.chain(
         distiller.student.parameters(),
         criterion.parameters()
