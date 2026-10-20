@@ -41,9 +41,9 @@ class GVENDILoss(nn.Module):
 
         self.grad_dim = 512
 
-        self.grad_stu_proj = nn.Linear(self.grad_dim, self.grad_dim)
+        self.grad_stu_proj = nn.Linear(self.grad_dim, self.grad_dim, bias=False)
         with torch.no_grad():
-            self.grad_stu_proj.weight.normal_(mean=0.0, std=1e-3)
+            nn.init.orthogonal_(self.grad_stu_proj.weight)
 
         if dist.is_initialized():
             self.world_size = dist.get_world_size()
@@ -69,7 +69,7 @@ class GVENDILoss(nn.Module):
             params.append(p)
         return params
 
-    def _extract_grads(
+    def _extract_grads_old(
         self,
         loss: Tensor,
         params: List[nn.Parameter],
@@ -99,6 +99,38 @@ class GVENDILoss(nn.Module):
 
         return g.unsqueeze(0)  # [1, P]
 
+
+    def _extract_grads(
+        self,
+        losses: Tensor,
+        params: List[nn.Parameter],
+        create_graph: bool = False,
+    ):
+        """
+        losses: [B] - per-anchor InfoNCE losses
+
+        Returns:
+            G: [B, P]
+        """
+        B = losses.size(0)
+
+        grad_outputs = torch.eye(B, device=losses.device, dtype=losses.dtype)
+
+        grads = torch.autograd.grad(
+            outputs=losses,
+            inputs=params,
+            grad_outputs=grad_outputs,
+            is_grads_batched=True,
+            create_graph=create_graph,
+            retain_graph=create_graph,
+            allow_unused=False,
+        )
+
+        G = torch.cat([g.reshape(B, -1).float() for g in grads], dim=-1) # [B, P]
+
+        return G
+
+    
     def get_num_layers(self,model):
         config = model.config
 
@@ -115,7 +147,8 @@ class GVENDILoss(nn.Module):
         student_model = distiller.student
         # Extract LoRA parameters for teacher and student models
         if not self.teacher_grads:
-            num_teacher_layers = self.get_num_layers(teacher_model.encoder) - 1
+            num_teacher_layers = self.get_num_layers(teacher_model.encoder)
+            # print(f"Number of teacher layers: {num_teacher_layers}")
             self.extracted_layer_ids = [f"layers.{num_teacher_layers - 1 - i}."
                 for i in range(self.args.num_layers)]
 
@@ -127,7 +160,8 @@ class GVENDILoss(nn.Module):
             tea_grad_dim = sum(p.numel() for p in self.teacher_grad_params)
             self._tea_rademacher_proj = RademacherProjection(param_dim=tea_grad_dim, proj_dim=self.grad_dim)
 
-            num_student_layers = self.get_num_layers(student_model.encoder) - 1
+            num_student_layers = self.get_num_layers(student_model.encoder)
+            # print(f"Number of student layers: {num_student_layers}")
             self.extracted_layer_ids = [f"layers.{num_student_layers - 1 - i}."
                 for i in range(self.args.num_layers)]
 
@@ -137,6 +171,8 @@ class GVENDILoss(nn.Module):
             stu_grad_dim = sum(p.numel() for p in self.student_grad_params)
             self._stu_rademacher_proj = RademacherProjection(param_dim=stu_grad_dim, proj_dim=self.grad_dim)
 
+            device = self.student_grad_params[0].device
+            self.grad_stu_proj = self.grad_stu_proj.to(device)
 
             self.teacher_grads = True
 
@@ -179,41 +215,64 @@ class GVENDILoss(nn.Module):
             all_teacher_pos_reps = teacher_pos_reps
 
         scores = student_model.compute_similarity(all_student_qry_reps, all_student_pos_reps)
-        scores = scores.view(all_student_qry_reps.size(0), -1)
+        scores = scores.view(all_student_qry_reps.size(0), -1) / self.distiller.temperature
         target = torch.arange(scores.size(0), device=scores.device, dtype=torch.long)
         target = target * (all_student_qry_reps.size(0) // all_student_pos_reps.size(0))
-        contrastive_loss = nn.CrossEntropyLoss()(scores / self.distiller.temperature, target)
+        student_losses = F.cross_entropy(scores, target, reduction="none")
+        contrastive_loss = student_losses.mean()
 
             
         teacher_scores = teacher_model.compute_similarity(all_teacher_qry_reps, all_teacher_pos_reps)
-        teacher_scores = teacher_scores.view(all_teacher_qry_reps.size(0), -1)
-        teacher_contrastive_loss = F.cross_entropy(teacher_scores, target)
-
+        teacher_scores = teacher_scores.view(all_teacher_qry_reps.size(0), -1) / self.distiller.temperature
+        teacher_losses = F.cross_entropy(teacher_scores, target, reduction="none")
 
         grad_loss = torch.zeros_like(contrastive_loss)
 
         if self.args.use_distill_grad_loss:
             teacher_grads = self._extract_grads(
-                teacher_contrastive_loss,
+                teacher_losses,
                 self.teacher_grad_params,
-                create_graph=False,
-                retain_graph=False
-            )
+                create_graph=False
+            ).detach()
 
             student_grads = self._extract_grads(
-                contrastive_loss,
+                student_losses,
                 self.student_grad_params,
-                create_graph=True,
-                retain_graph=True
+                create_graph=True
             )
 
-            
+            # Project the gradients
             projected_teacher_grads = self._tea_rademacher_proj(teacher_grads)
             projected_student_grads = self._stu_rademacher_proj(student_grads)
-            self.grad_stu_proj.to(projected_student_grads.device)
-            aligned_projected_student_grads = self.grad_stu_proj(projected_student_grads)
 
-            grad_loss = F.mse_loss(aligned_projected_student_grads, projected_teacher_grads)
+            projected_teacher_grads = F.normalize(
+                projected_teacher_grads.detach().float(),
+                p=2, dim=-1,eps=1e-8
+            )
+
+            projected_student_grads = F.normalize(
+                projected_student_grads.float(), p=2, dim=-1, eps=1e-8
+            )
+
+            Gt = F.normalize(projected_teacher_grads.detach(),
+                dim=-1, eps=1e-8
+            )
+
+            Gs = F.normalize(projected_student_grads,
+                dim=-1, eps=1e-8
+            )
+
+            # Gradient Gram matrices
+            Kt = Gt @ Gt.T
+            Ks = Gs @ Gs.T
+
+            B = Ks.size(0)
+
+            if B > 1:
+                mask = ~torch.eye(B, device=Ks.device, dtype=torch.bool)
+                grad_loss = ((Ks - Kt).square()[mask].mean())
+            else:
+                grad_loss = Ks.sum() * 0.0
         
         loss = contrastive_loss + self.args.grad_weight * grad_loss
 

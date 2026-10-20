@@ -56,7 +56,7 @@ D_GRAD=$(bool_to_int "$USE_DISTILL_GRAD_LOSS")
 # Tên experiment
 # ============================================================
 
-EXP_NAME="gvendi_cse${D_CSE}_grad${D_GRAD}_kd-weight${KD_WEIGHT}_grad-weight${GRAD_WEIGHT}_l${NUM_LAYER}"
+EXP_NAME="gvendi_cse${D_CSE}_grad${D_GRAD}_kd-w${KD_WEIGHT}_grad-w${GRAD_WEIGHT}_l${NUM_LAYER}"
 
 OUTPUT_DIR="training/FastVLM-0.5B_cls_${EXP_NAME}"
 CACHE_DIR="caching/B3_Qwen2_2B_cls"
@@ -101,7 +101,7 @@ torchrun --master_port=12347 --nproc_per_node=$NUM_GPUS_PER_NODE $TRAIN_SCRIPT \
     --subset_name "ImageNet_1K" "N24News" "HatefulMemes" "VOC2007" "SUN397" \
     --dataset_split "original" \
     --image_dir "vlm2vec_train/MMEB-train" \
-    --output_dir "training/FastVLM-0.5B_gvendi_grad_matching" \
+    --output_dir $OUTPUT_DIR \
     --per_device_train_batch_size 16 \
     --gradient_accumulation_steps 1 \
     --learning_rate 1e-4 \
