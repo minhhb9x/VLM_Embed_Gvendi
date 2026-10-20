@@ -11,6 +11,7 @@ USE_DISTILL_GRAD_LOSS=${2:-True}
 KD_WEIGHT=${3:-1.0}
 GRAD_WEIGHT=${4:-0.1}
 NUM_LAYER=${5:-1}
+PORT=${6:-12347}
 
 bool_to_python() {
     case "$1" in
@@ -86,7 +87,7 @@ TRAIN_SCRIPT="train_distill_ddp.py"
 # =========================================================================
 # Dùng torchrun để khởi chạy
 # =========================================================================
-torchrun --master_port=12347 --nproc_per_node=$NUM_GPUS_PER_NODE $TRAIN_SCRIPT \
+torchrun --master_port=$PORT --nproc_per_node=$NUM_GPUS_PER_NODE $TRAIN_SCRIPT \
     --model_name "apple/FastVLM-0.5B" \
     --teacher_model_name "raghavlite/B3_Qwen2_2B" \
     --lora True \
