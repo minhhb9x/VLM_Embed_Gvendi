@@ -176,6 +176,20 @@ class GVENDILoss(nn.Module):
 
             self.teacher_grads = True
 
+    def cross_model_infonce(self, sq, sp, tq, tp, tau=0.02):
+        tq = F.normalize(tq.float(), dim=-1)
+        tp = F.normalize(tp.float(), dim=-1)
+
+        sq = F.normalize(sq.float(), dim=-1)
+        sp = F.normalize(sp.float(), dim=-1)
+
+        labels = torch.arange(sq.size(0), device=sq.device)
+
+        loss_q = F.cross_entropy(sq @ tp.T / tau, labels)
+        loss_p = F.cross_entropy(tq @ sp.T / tau, labels)
+
+        return (loss_q + loss_p) / 2
+
     def forward(self, distiller, input_data):
         self.distiller = distiller
         student_model = distiller.student
@@ -273,8 +287,23 @@ class GVENDILoss(nn.Module):
                 grad_loss = ((Ks - Kt).square()[mask].mean())
             else:
                 grad_loss = Ks.sum() * 0.0
+
+
+        kd_loss = torch.zeros_like(contrastive_loss)
+        if self.args.use_distill_cse_loss:
+            projectors = distiller.projectors
+            proj_teacher_qry_reps = projectors['qry'](all_teacher_qry_reps.detach())
+            proj_teacher_pos_reps = projectors['pos'](all_teacher_pos_reps.detach())
+
+            kd_loss = self.cross_model_infonce(
+                all_student_qry_reps,
+                all_student_pos_reps,
+                proj_teacher_qry_reps,
+                proj_teacher_pos_reps,
+            )
+
         
-        loss = contrastive_loss + self.args.grad_weight * grad_loss
+        loss = contrastive_loss + self.args.grad_weight * grad_loss + self.args.kd_weight * kd_loss
 
         return {
             'loss': loss,

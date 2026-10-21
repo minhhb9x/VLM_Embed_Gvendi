@@ -6,12 +6,12 @@ SUBSETS=(
 )
 
 # MODEL=training/FastVLM-0.5B_base_16_eos_cls/checkpoint-final
-MODEL=training/FastVLM-0.5B_cls_gvendi_cse0_grad1_kd-weight1.0_grad-weight0.1_l1/checkpoint-epoch-0
+MODEL=training/FastVLM-0.5B_cls_gvendi_cse0_grad1_kd-w1.0_grad-w1.0_l1/checkpoint-epoch-0
 
 
 python eval_mmeb.py \
     --model_name $MODEL \
-    --encode_output_path './MMEB-eval_outputs/FastVLM-0.5B_cls_gvendi_cse0_grad1_kd-weight1.0_grad-weight0.1_l1/' \
+    --encode_output_path './MMEB-eval_outputs/FastVLM-0.5B_cls_gvendi_cse0_grad1_kd-w1.0_grad-w1.0_l1/' \
     --lora True --lora_r 64 --lora_alpha 64 \
     --pooling eos \
     --model_backbone llava_qwen2 \

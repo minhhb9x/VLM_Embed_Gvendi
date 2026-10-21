@@ -82,6 +82,9 @@ class DataArguments:
     percent_data: float = field(default=1.0, metadata={"help": "percentage of data used for distillation training"})
     # args for TALAS
     caching_dir: str = field(default=None, metadata={"help": "caching directory for TALAS"})
+    # args for teacher image resolution
+    teacher_image_resolution: str = field(default=None, metadata={"help": "for models i.e. LLaVA-next and Qwen, resize images first, none means using original image resolution. This is only works when `--resize_use_processor false`."})
+
 
 
 @dataclass
