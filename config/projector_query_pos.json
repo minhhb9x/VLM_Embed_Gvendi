@@ -1,9 +1,5 @@
 {
-    "qry": {
-        "enabled": true,
-        "structure": "s-t"
-    },
-    "pos": {
+    "s2t": {
         "enabled": true,
         "structure": "s-t"
     }
