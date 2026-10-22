@@ -292,14 +292,14 @@ class GVENDILoss(nn.Module):
         kd_loss = torch.zeros_like(contrastive_loss)
         if self.args.use_distill_cse_loss:
             projectors = distiller.projectors
-            proj_teacher_qry_reps = projectors['qry'](all_teacher_qry_reps.detach())
-            proj_teacher_pos_reps = projectors['pos'](all_teacher_pos_reps.detach())
+            proj_student_qry_reps = projectors['qry'](all_student_qry_reps)
+            proj_student_pos_reps = projectors['pos'](all_student_pos_reps)
 
             kd_loss = self.cross_model_infonce(
-                all_student_qry_reps,
-                all_student_pos_reps,
-                proj_teacher_qry_reps,
-                proj_teacher_pos_reps,
+                proj_student_qry_reps,
+                proj_student_pos_reps,
+                all_teacher_qry_reps,
+                all_teacher_pos_reps,
             )
 
         

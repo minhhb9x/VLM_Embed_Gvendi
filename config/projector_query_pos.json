@@ -1,10 +1,10 @@
 {
     "qry": {
         "enabled": true,
-        "structure": "t-s"
+        "structure": "s-t"
     },
     "pos": {
         "enabled": true,
-        "structure": "t-s"
+        "structure": "s-t"
     }
 }
