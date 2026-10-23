@@ -295,12 +295,19 @@ class GVENDILoss(nn.Module):
             proj_student_qry_reps = projectors['s2t'](all_student_qry_reps)
             proj_student_pos_reps = projectors['s2t'](all_student_pos_reps)
 
-            kd_loss = self.cross_model_infonce(
-                proj_student_qry_reps,
-                proj_student_pos_reps,
-                all_teacher_qry_reps.detach(),
-                all_teacher_pos_reps.detach(),
-            )
+            # kd_loss = self.cross_model_infonce(
+            #     proj_student_qry_reps,
+            #     proj_student_pos_reps,
+            #     all_teacher_qry_reps.detach(),
+            #     all_teacher_pos_reps.detach(),
+            # )
+
+            kd_loss = (1 - F.cosine_similarity(
+                torch.cat([proj_student_qry_reps, 
+                           proj_student_pos_reps], dim=0),
+                torch.cat([all_teacher_qry_reps.detach(), 
+                           all_teacher_pos_reps.detach()], dim=0))
+            ).mean()
 
         
         loss = contrastive_loss + self.args.grad_weight * grad_loss + self.args.kd_weight * kd_loss

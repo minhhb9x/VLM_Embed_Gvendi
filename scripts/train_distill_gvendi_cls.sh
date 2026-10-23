@@ -57,7 +57,7 @@ D_GRAD=$(bool_to_int "$USE_DISTILL_GRAD_LOSS")
 # Tên experiment
 # ============================================================
 
-EXP_NAME="gvendi_info-s-t${D_CSE}_grad${D_GRAD}_kd-w${KD_WEIGHT}_grad-w${GRAD_WEIGHT}_l${NUM_LAYER}"
+EXP_NAME="gvendi_cosine-s-t${D_CSE}_grad${D_GRAD}_kd-w${KD_WEIGHT}_grad-w${GRAD_WEIGHT}_l${NUM_LAYER}"
 
 OUTPUT_DIR="training/FastVLM-0.5B_cls_${EXP_NAME}"
 CACHE_DIR="caching/B3_Qwen2_2B_cls"
