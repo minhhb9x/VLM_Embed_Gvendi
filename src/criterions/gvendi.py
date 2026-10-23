@@ -315,6 +315,7 @@ class GVENDILoss(nn.Module):
         return {
             'loss': loss,
             'contrastive_loss': contrastive_loss,
-            'grad_loss': grad_loss
+            'grad_loss': grad_loss,
+            'kd_loss': kd_loss,
         }
                         
