@@ -109,9 +109,9 @@ class MMEBModel(nn.Module):
                 del input['pixel_values']
                 hidden_states = self.encoder.language_model(**input, return_dict=True, output_hidden_states=True)
             
-            hidden_states = hidden_states.hidden_states[-1]
-            pooled_output = self._pooling(hidden_states, input['attention_mask'])
-            return pooled_output
+            last_hidden_states = hidden_states.hidden_states[-1]
+            pooled_output = self._pooling(last_hidden_states, input['attention_mask'])
+            return pooled_output, None, None, hidden_states
             """
                 - num_tokens = num_image_tokens - 1 + text_tokens
                 - hidden_states.hidden_states: (num_layers, batch, num_tokens, embed_dim)
