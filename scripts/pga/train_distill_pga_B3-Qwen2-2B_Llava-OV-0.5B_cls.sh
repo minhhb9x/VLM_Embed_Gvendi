@@ -56,16 +56,8 @@ torchrun --master_port=$PORT \
 
 
 EVAL_SUBSETS=(
-    "ImageNet-1K"
-    "N24News"
-    "HatefulMemes"
-    "VOC2007"
-    "SUN397"
-    "Place365"
-    "ImageNet-A"
-    "ImageNet-R"
-    "ObjectNet"
-    "Country211"
+    "ImageNet-1K" "N24News" "HatefulMemes" "VOC2007" "SUN397"
+    "Place365" "ImageNet-A" "ImageNet-R" "ObjectNet" "Country211"
 )
 
 
