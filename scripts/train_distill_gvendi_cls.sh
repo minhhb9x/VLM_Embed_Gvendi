@@ -57,7 +57,7 @@ D_GRAD=$(bool_to_int "$USE_DISTILL_GRAD_LOSS")
 # Tên experiment
 # ============================================================
 
-EXP_NAME="gvendi_cosine-s-t${D_CSE}_grad${D_GRAD}_kd-w${KD_WEIGHT}_grad-w${GRAD_WEIGHT}_l${NUM_LAYER}"
+EXP_NAME="gvendi_rkda${D_CSE}_grad${D_GRAD}_kd-w${KD_WEIGHT}_grad-w${GRAD_WEIGHT}_l${NUM_LAYER}"
 
 OUTPUT_DIR="training/FastVLM-0.5B_cls_${EXP_NAME}"
 CACHE_DIR="caching/B3_Qwen2_2B_cls"
@@ -123,8 +123,8 @@ torchrun --master_port=$PORT --nproc_per_node=$NUM_GPUS_PER_NODE $TRAIN_SCRIPT \
     --use_distill_grad_loss "$DISTILL_GRAD_BOOL" \
     --kd_weight $KD_WEIGHT \
     --grad_weight $GRAD_WEIGHT \
-    --num_layers $NUM_LAYER \
-    --projector_config_path "config/projector_query_pos.json"
+    --num_layers $NUM_LAYER 
+    # --projector_config_path "config/projector_query_pos.json"
 
 
 # ============================================================

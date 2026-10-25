@@ -1,111 +1,40 @@
-import sys
+import pickle
+import numpy as np
 
-import torch
-import torch.nn.functional as F
-from PIL import Image
+root = "./MMEB-eval_outputs/InternVL3-14B/"
 
-from src.arguments import ModelArguments, DataArguments
-from src.model.model import MMEBModel
-from src.model.model import MMEBModel
-from src.model.processor import QWEN3_VL, Qwen3_VL_process_fn
-from src.model.vlm_backbone.qwen3_vl_embedding import (
-    Qwen3VLForEmbedding,
-    Qwen3VLProcessor,
-)
-from src.model.processor import load_processor
+with open(root + "ImageNet-1K_qry", "rb") as f:
+    q, _ = pickle.load(f)
 
+with open(root + "ImageNet-1K_tgt", "rb") as f:
+    t, _ = pickle.load(f)
 
-model_name = "Qwen/Qwen3-VL-Embedding-2B"
-device = "cuda"
+q = np.asarray(q, dtype=np.float32)
+t = np.asarray(t, dtype=np.float32)
 
+q = q / np.maximum(np.linalg.norm(q, axis=-1, keepdims=True), 1e-12)
+t = t / np.maximum(np.linalg.norm(t, axis=-1, keepdims=True), 1e-12)
 
-model_args = ModelArguments(
-    model_name=model_name,
-    pooling='last',
-    normalize=True,
-    model_backbone='qwen3_vl',
-    lora=False,
-)
+print("Shapes:", q.shape, t.shape)
 
-model = MMEBModel.load(model_args).eval().to(device)
-processor = load_processor(model_args, None)
+# Similarity giữa các query
+q_small = q[:200]
+q_sim = q_small @ q_small.T
+mask = ~np.eye(len(q_small), dtype=bool)
 
-image = Image.open("example.jpg").convert("RGB")
+print("Query pairwise cosine:", q_sim[mask].mean())
 
-inputs = Qwen3_VL_process_fn(
-    model_inputs={
-        "text": ["<|image_pad|> Represent this image", "<|image_pad|> Represent this image"],
-        "images": [[image.resize((128, 128))], [image.resize((128, 64))]],
-    },
-    processor=processor
-)
-inputs = {key: value.to(device) for key, value in inputs.items()}
+# Similarity giữa các target
+t_small = t[:200]
+t_sim = t_small @ t_small.T
+mask = ~np.eye(len(t_small), dtype=bool)
 
-input_ids = inputs["input_ids"]
-attention_mask = inputs["attention_mask"]
+print("Target pairwise cosine:", t_sim[mask].mean())
 
-tokenizer = processor.tokenizer
+# Cross-modal similarity
+sim = q @ t.T
+pred = sim.argmax(axis=1)
 
-for i in range(input_ids.size(0)):
-    ids = input_ids[i]
-    mask = attention_mask[i].bool()
-
-    valid_ids = ids[mask]
-    valid_tokens = tokenizer.convert_ids_to_tokens(valid_ids.tolist())
-    decoded = tokenizer.decode(valid_ids, skip_special_tokens=False)
-
-    print(f"\n{'=' * 80}")
-    print(f"SAMPLE {i}")
-    print(f"{'=' * 80}")
-
-    print("Sequence length:", ids.numel())
-    print("Valid length:", mask.sum().item())
-
-    print("\nINPUT IDS:")
-    print(valid_ids.tolist())
-
-    print("\nTOKENS:")
-    for j, (token_id, token) in enumerate(zip(valid_ids.tolist(), valid_tokens)):
-        print(f"{j:4d} | {token_id:6d} | {repr(token)}")
-
-    print("\nDECODED:")
-    print(decoded)
-
-with torch.inference_mode():
-    pooled_output, _, attention_matrix, output_hidden_states = model.encode_input(inputs)
-
-hidden = output_hidden_states[-1]
-
-print("\n" + "=" * 80)
-print("HIDDEN STATE CHECK")
-print("=" * 80)
-
-print("input_ids shape:     ", tuple(inputs["input_ids"].shape))
-print("attention_mask shape:", tuple(inputs["attention_mask"].shape))
-print("hidden shape:        ", tuple(hidden.shape))
-
-print("\nPadded sequence length:")
-print("input_ids:", inputs["input_ids"].shape[1])
-print("hidden:   ", hidden.shape[1])
-print("same:", inputs["input_ids"].shape[1] == hidden.shape[1])
-
-for i in range(hidden.size(0)):
-    mask = inputs["attention_mask"][i].bool()
-
-    num_input_tokens = inputs["input_ids"][i].numel()
-    num_valid_tokens = mask.sum().item()
-    num_hidden_tokens = hidden[i].shape[0]
-    num_valid_hidden_tokens = hidden[i][mask].shape[0]
-
-    print(f"\nSAMPLE {i}")
-    print(f"input tokens (with padding):  {num_input_tokens}")
-    print(f"valid input tokens:           {num_valid_tokens}")
-    print(f"hidden tokens (with padding): {num_hidden_tokens}")
-    print(f"valid hidden tokens:          {num_valid_hidden_tokens}")
-
-    print(
-        "valid lengths match:",
-        num_valid_tokens == num_valid_hidden_tokens
-    )
-
-print(processor.image_token_id)
+print("Q-T cosine mean:", sim.mean())
+print("Q-T cosine std:", sim.std())
+print("Unique predicted classes:", len(np.unique(pred)))

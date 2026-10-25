@@ -190,6 +190,18 @@ class GVENDILoss(nn.Module):
 
         return (loss_q + loss_p) / 2
 
+    def rkd_angle(self, student: torch.Tensor, teacher: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            teacher_diff = teacher.unsqueeze(0) - teacher.unsqueeze(1)
+            teacher_diff = F.normalize(teacher_diff, p=2, dim=2)
+            teacher_angle = torch.bmm(teacher_diff, teacher_diff.transpose(1, 2)).reshape(-1)
+
+        student_diff = student.unsqueeze(0) - student.unsqueeze(1)
+        student_diff = F.normalize(student_diff, p=2, dim=2)
+        student_angle = torch.bmm(student_diff, student_diff.transpose(1, 2)).reshape(-1)
+
+        return F.smooth_l1_loss(student_angle, teacher_angle)
+
     def forward(self, distiller, input_data):
         self.distiller = distiller
         student_model = distiller.student
@@ -291,24 +303,14 @@ class GVENDILoss(nn.Module):
 
         kd_loss = torch.zeros_like(contrastive_loss)
         if self.args.use_distill_cse_loss:
-            projectors = distiller.projectors
-            proj_student_qry_reps = projectors['s2t'](all_student_qry_reps)
-            proj_student_pos_reps = projectors['s2t'](all_student_pos_reps)
+            # projectors = distiller.projectors
+            # proj_student_qry_reps = projectors['s2t'](all_student_qry_reps)
+            # proj_student_pos_reps = projectors['s2t'](all_student_pos_reps)
 
-            # kd_loss = self.cross_model_infonce(
-            #     proj_student_qry_reps,
-            #     proj_student_pos_reps,
-            #     all_teacher_qry_reps.detach(),
-            #     all_teacher_pos_reps.detach(),
-            # )
-
-            kd_loss = (1 - F.cosine_similarity(
-                torch.cat([proj_student_qry_reps, 
-                           proj_student_pos_reps], dim=0),
-                torch.cat([all_teacher_qry_reps.detach(), 
-                           all_teacher_pos_reps.detach()], dim=0))
-            ).mean()
-
+            kd_loss = self.rkd_angle(
+                torch.cat([all_student_qry_reps, all_student_pos_reps], dim=0),
+                torch.cat([all_teacher_qry_reps, all_teacher_pos_reps], dim=0)
+            )
         
         loss = contrastive_loss + self.args.grad_weight * grad_loss + self.args.kd_weight * kd_loss
 

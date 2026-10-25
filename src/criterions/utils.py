@@ -48,6 +48,26 @@ def get_hidden_text_vision(hidden_state, num_text_token, num_vision_token, atten
    
     return text_hidden_state, vision_hidden_state
 
+def get_attn_text_vision(attention, num_text_token, num_vision_token, attention_mask):
+    '''
+    Get attention for text and vision tokens separately
+    Args:
+        attention: tensor, the output attention from the model
+        num_text_token: int, number of text tokens
+        num_vision_token: int, number of vision tokens
+        attention_mask: tensor, the attention mask indicating valid tokens # [Sequence length]
+        (note: only )
+    '''
+    left_padding = attention_mask[0] == 0 and attention_mask[-1] == 1
+    if left_padding:
+        vision_attention = attention[-(num_vision_token+num_text_token): -num_text_token]
+        text_attention = attention[-num_text_token:]
+    else:
+        vision_attention = attention[:num_vision_token]
+        text_attention = attention[num_vision_token: num_vision_token + num_text_token]
+   
+    return text_attention, vision_attention
+
 def pooling(last_hidden_state, attention_mask, mode='eos', normalize=True):
     if mode == 'last' or mode == 'eos':
         left_padding = (attention_mask[:, -1].sum() == attention_mask.shape[0])

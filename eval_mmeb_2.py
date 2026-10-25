@@ -81,7 +81,7 @@ def main():
             sys.argv.append(rank)
     parser = HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-    seed_everything(training_args.seed, training_args.local_rank)
+    # seed_everything(training_args.seed, training_args.local_rank)
     use_wandb = False
     is_main_process = training_args.local_rank in [-1, 0]
     if is_main_process:
