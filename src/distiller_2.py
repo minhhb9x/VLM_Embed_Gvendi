@@ -403,7 +403,29 @@ class DistillationDataset(Dataset):
             return process_image(image, self.data_args.image_resolution)
         else:
             return image
-        
+
+    def _get_teacher_image(self, img_path, backbone):
+            if not img_path:
+                return None
+            full_img_path = os.path.join(self.data_args.image_dir, img_path)
+            image = Image.open(full_img_path)
+            image = image.convert("RGB")
+            width, height = image.size
+            MIN_SIZE = 16
+            if width < MIN_SIZE or height < MIN_SIZE:
+                new_width = max(width, MIN_SIZE)
+                new_height = max(height, MIN_SIZE)
+                result = Image.new(image.mode, (new_width, new_height), (0,0,0))
+                x_offset = (new_width - width) // 2
+                y_offset = (new_height - height) // 2
+                result.paste(image, (x_offset, y_offset))
+                image = result
+            if backbone != PHI3V and (self.data_args.teacher_image_resolution or self.data_args.image_resolution):
+                resolution = self.data_args.teacher_image_resolution or self.data_args.image_resolution
+                return process_image(image, resolution)
+            else:
+                return image
+                   
     def __getitem__(self, data_idx):
         # print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>get image called, {data_idx}", flush=True)
         
@@ -443,8 +465,8 @@ class DistillationDataset(Dataset):
             if teacher_backbone != PHI3V:
                 teacher_qry_text = teacher_qry_text.replace(VLM_IMAGE_TOKENS[PHI3V], VLM_IMAGE_TOKENS[teacher_backbone])
                 teacher_pos_text = teacher_pos_text.replace(VLM_IMAGE_TOKENS[PHI3V], VLM_IMAGE_TOKENS[teacher_backbone])
-            teacher_qry_image = self._get_image(qry_image_path, teacher_backbone)
-            teacher_pos_image = self._get_image(pos_image_path, teacher_backbone)
+            teacher_qry_image = self._get_teacher_image(qry_image_path, teacher_backbone)
+            teacher_pos_image = self._get_teacher_image(pos_image_path, teacher_backbone)
 
             if (not teacher_qry_text and not teacher_qry_image) or (not teacher_pos_text and not teacher_pos_image):
                 print("empty inputs")

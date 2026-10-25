@@ -67,7 +67,6 @@ EVAL_SUBSETS=(
     "Country211"
 )
 
-rm -rf ./MMEB-eval_outputs/B3-Qwen2-2B_FastVLM-0.5B_pga_cls
 
 EVAL_BATCH_SIZE=16
 OUTPUT_BASE="./MMEB-eval_outputs/B3-Qwen2-2B_FastVLM-0.5B_pga_cls"
