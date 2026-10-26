@@ -16,3 +16,4 @@ meta_train/
 analyze/
 training*/
 erank_results/
+vlm2vec_external/

@@ -2,8 +2,7 @@ import os
 from src.arguments import ModelArguments, DataArguments
 from src.model.model import MMEBModel
 from src.model.processor import load_processor, QWEN2_VL, VLM_IMAGE_TOKENS, LLAVA_ONEVISION, \
-    Qwen2_VL_process_fn, LLAVA_QWEN2, FastVLM_process_fn, Llava_ONEVISION_process_fn,\
-    Qwen2_5_VL_Instruct_process_fn, QWEN2_5_VL_INSTRUCT, QWEN3_VL, Qwen3_VL_process_fn
+    Qwen2_VL_process_fn, LLAVA_QWEN2, FastVLM_process_fn, Llava_ONEVISION_process_fn, QWEN3_VL, Qwen3_VL_process_fn
 from src.utils import batch_to_device
 from PIL import Image
 import numpy as np
@@ -40,28 +39,31 @@ from transformers.image_transforms import (
 # token_img = LLAVA_QWEN2
 
 
-# model_args = ModelArguments(
-#     model_name='llava-hf/llava-onevision-qwen2-0.5b-ov-hf',
-#     pooling='last',
-#     normalize=True,
-#     model_backbone=LLAVA_ONEVISION,
-#     lora=True,
-# )
-# process_fn = Llava_ONEVISION_process_fn
-# token_img = LLAVA_ONEVISION
-
-
 model_args = ModelArguments(
-    model_name='Qwen/Qwen3-VL-Embedding-8B',
+    model_name='llava-hf/llava-onevision-qwen2-0.5b-ov-hf',
     pooling='last',
     normalize=True,
-    model_backbone=QWEN3_VL,
+    model_backbone=LLAVA_ONEVISION,
+    # lora=True,
 )
 data_args = DataArguments(
-    image_resolution = 'low'
+    image_resolution = 'tiny'
 )
-process_fn = Qwen3_VL_process_fn
-token_img = QWEN3_VL
+process_fn = Llava_ONEVISION_process_fn
+token_img = LLAVA_ONEVISION
+
+
+# model_args = ModelArguments(
+#     model_name='Qwen/Qwen3-VL-Embedding-8B',
+#     pooling='last',
+#     normalize=True,
+#     model_backbone=QWEN3_VL,
+# )
+# data_args = DataArguments(
+#     image_resolution = 'low'
+# )
+# process_fn = Qwen3_VL_process_fn
+# token_img = QWEN3_VL
 
 
 
@@ -73,7 +75,7 @@ model.eval()
 processor_inputs = {
     "text": [f'Represent the given image with the following question: What is in the image {VLM_IMAGE_TOKENS[token_img]}',
           f'Represent the given image with the following question: What is in the image'],
-    "images": [Image.open('example.jpg').resize((640, 640)), None],
+    "images": [Image.open('example.jpg').resize((336, 336))],
 }
 
 inputs = process_fn(

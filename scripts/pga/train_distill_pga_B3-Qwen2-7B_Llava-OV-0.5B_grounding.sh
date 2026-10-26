@@ -51,7 +51,7 @@ torchrun --master_port=$PORT \
     --image_resolution "tiny" \
     --teacher_image_resolution "low" \
     --projector_lr 5e-4 \
-    --projector_config_path "./config/projector_config.json" \
+    --projector_config_path "config/projector_pga.json" \
     --teacher_hidden_dim 3584 \
     --report_to none 
 

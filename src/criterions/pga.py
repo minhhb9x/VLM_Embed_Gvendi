@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.distributed as dist
 import torch.nn.functional as F
 from torch import Tensor
-from .utils import count_clean_text_tokens, get_hidden_text_vision, get_attn_text_vision
+from .utils import count_clean_text_tokens, get_hidden_text_vision, get_attn_text_vision, pooling
 
 class PGA(nn.Module):
     def __init__(self, args):
@@ -258,12 +258,13 @@ class PGA(nn.Module):
         
         
         #------ KD MSE Loss Part ------
-        proj_teacher_qry_reps = projectors['t2s'](all_teacher_qry_reps)
-        proj_teacher_pos_reps = projectors['t2s'](all_teacher_pos_reps)
+        # proj_teacher_qry_reps = projectors['t2s'](all_teacher_qry_reps)
+        # proj_teacher_pos_reps = projectors['t2s'](all_teacher_pos_reps)
 
         # Tính MSE giữa các đại diện đã được projector
-        mse_loss = nn.MSELoss()(torch.cat([all_student_qry_reps, all_student_pos_reps], dim=0), 
-                                torch.cat([proj_teacher_qry_reps, proj_teacher_pos_reps], dim=0))
+        mse_loss = torch.zeros_like(contrastive_loss)
+        # mse_loss = nn.MSELoss()(torch.cat([all_student_qry_reps, all_student_pos_reps], dim=0), 
+        #                         torch.cat([proj_teacher_qry_reps, proj_teacher_pos_reps], dim=0))
         
         cur_idx_qry_img = 0
         cur_idx_pos_img = 0
@@ -446,8 +447,9 @@ class PGA(nn.Module):
 
         scl_loss = intra_loss + inter_loss
 
-        pga_loss = self.pga_loss(torch.cat([stu_vision_pooled_reps, stu_text_pooled_reps], dim=0), 
-                                 torch.cat([proj_tea_vision_pooled_reps, proj_tea_text_pooled_reps], dim=0))
+        # pga loss
+        pga_loss = self.pga_loss(torch.cat([all_student_qry_reps, all_student_pos_reps], dim=0), 
+                                 torch.cat([all_teacher_qry_reps, all_teacher_pos_reps], dim=0))
 
         kd_loss = (mse_loss + 0.5*scl_loss + pga_loss)
         
