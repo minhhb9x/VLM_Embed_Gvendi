@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.distributed as dist
 import torch.nn.functional as F
 from torch import Tensor
-from .utils import count_clean_text_tokens, get_hidden_text_vision, get_attn_text_vision, pooling
+from .utils import count_clean_text_tokens, get_hidden_text_vision, get_attn_text_vision, pooling, extract_modality_tokens
 
 class PGA(nn.Module):
     def __init__(self, args):
@@ -266,184 +266,64 @@ class PGA(nn.Module):
         # mse_loss = nn.MSELoss()(torch.cat([all_student_qry_reps, all_student_pos_reps], dim=0), 
         #                         torch.cat([proj_teacher_qry_reps, proj_teacher_pos_reps], dim=0))
         
-        cur_idx_qry_img = 0
-        cur_idx_pos_img = 0
-
-        student_special_ids = torch.tensor(
-            list(
-                set(
-                    list(student_tokenizer.added_tokens_encoder.values()) +
-                    student_tokenizer.all_special_ids
-                )
-            ),
-            device=student_qry_input['input_ids'].device,
-            dtype=torch.long
+        stu_qry = extract_modality_tokens(
+            student_processor, student_qry_input, student_qry_image_features,
+            student_qry_attention, student_qry_hidden_states, student_model.model_backbone
+        )
+        stu_pos = extract_modality_tokens(
+            student_processor, student_pos_input, student_pos_image_features,
+            student_pos_attention, student_pos_hidden_states, student_model.model_backbone
+        )
+        tea_qry = extract_modality_tokens(
+            teacher_processor, teacher_qry_input, teacher_qry_image_features,
+            teacher_qry_attention, teacher_qry_hidden_states, teacher_model.model_backbone
+        )
+        tea_pos = extract_modality_tokens(
+            teacher_processor, teacher_pos_input, teacher_pos_image_features,
+            teacher_pos_attention, teacher_pos_hidden_states, teacher_model.model_backbone
         )
 
-        teacher_special_ids = torch.tensor(
-            list(
-                set(
-                    list(teacher_tokenizer.added_tokens_encoder.values()) +
-                    teacher_tokenizer.all_special_ids
-                )
-            ),
-            device=teacher_qry_input['input_ids'].device,
-            dtype=torch.long
-        )
+        stu_img, tea_img, stu_txt, tea_txt = [], [], [], []
 
-        num_student_text_qry_tokens = count_clean_text_tokens(student_qry_input, student_special_ids)
-        num_student_text_pos_tokens = count_clean_text_tokens(student_pos_input, student_special_ids)
+        for s_batch, t_batch in ((stu_qry, tea_qry), (stu_pos, tea_pos)):
+            for s, t in zip(s_batch, t_batch):
 
-        num_teacher_text_qry_tokens = count_clean_text_tokens(teacher_qry_input, teacher_special_ids)
-        num_teacher_text_pos_tokens = count_clean_text_tokens(teacher_pos_input, teacher_special_ids)
+                # Skip if either model has an empty modality
+                if any(x[k].size(1) == 0 for x in (s, t) for k in ("image", "text")):
+                    continue
 
-        # Extract last mean attention for both student and teacher
+                for sample, key, buffer in (
+                    (s, "image", stu_img),
+                    (t, "image", tea_img),
+                    (s, "text", stu_txt),
+                    (t, "text", tea_txt),
+                ):
+                    hidden = sample[key][-1]             # [N, D]
+                    attn = sample[f"{key}_attention"]
 
-        stu_last_mean_attn_qry = self.extract_last_mean_attention(student_qry_attention, student_qry_input['attention_mask']) # [B, L]
-        stu_last_mean_attn_pos = self.extract_last_mean_attention(student_pos_attention, student_pos_input['attention_mask'])
-
-        tea_last_mean_attn_qry = self.extract_last_mean_attention(teacher_qry_attention, teacher_qry_input['attention_mask'])
-        tea_last_mean_attn_pos = self.extract_last_mean_attention(teacher_pos_attention, teacher_pos_input['attention_mask'])
-
-        # SCL loss
-
-        stu_vision_pooled_reps = []
-        tea_vision_pooled_reps = []
-        stu_text_pooled_reps = []
-        tea_text_pooled_reps = []
-
-        for i in range(batch_size):
-            # 1. QUERY Processing
-            if student_qry_image_features is not None and teacher_qry_image_features is not None:
-                if cur_idx_qry_img < len(student_qry_image_features) and cur_idx_qry_img < len(teacher_qry_image_features):
-                    # --- Vision ---
-                    stu_feat = student_qry_image_features[cur_idx_qry_img]
-                    tea_feat = teacher_qry_image_features[cur_idx_qry_img]
-                    cur_idx_qry_img += 1
-                
-                    last_stu_text_hidden_state, last_stu_vision_hidden_state = get_hidden_text_vision(
-                        student_qry_hidden_states[-1][i],
-                        num_student_text_qry_tokens[i].item(),
-                        stu_feat.size(0),
-                        student_qry_input['attention_mask'][i]
+                    pooled = (
+                        self.attention_pool(hidden, attn[-1])
+                        if attn is not None else hidden.mean(dim=0)
                     )
-                    
+                    buffer.append(pooled)
 
-                    last_stu_text_attn, last_stu_vision_attn = get_attn_text_vision(
-                        stu_last_mean_attn_qry[i],
-                        num_student_text_qry_tokens[i].item(),
-                        stu_feat.size(0),
-                        student_qry_input['attention_mask'][i]
-                    )
 
-                    last_tea_text_hidden_state, last_tea_vision_hidden_state = get_hidden_text_vision(
-                        teacher_qry_hidden_states[-1][i],
-                        num_teacher_text_qry_tokens[i].item(),
-                        tea_feat.size(0),
-                        teacher_qry_input['attention_mask'][i]
-                    )
+        intra_loss = contrastive_loss.new_zeros(())
+        inter_loss = contrastive_loss.new_zeros(())
 
-                    last_tea_text_attn, last_tea_vision_attn = get_attn_text_vision(
-                        tea_last_mean_attn_qry[i],
-                        num_teacher_text_qry_tokens[i].item(),
-                        tea_feat.size(0),
-                        teacher_qry_input['attention_mask'][i]
-                    )
+        if len(stu_img) > 1:
+            sv, tv, st, tt = [
+                torch.stack(x) for x in (stu_img, tea_img, stu_txt, tea_txt)
+            ]
 
-                    stu_text_pooled_rep = self.attention_pool(
-                        last_stu_text_hidden_state, last_stu_text_attn
-                    )
-                    tea_text_pooled_rep = self.attention_pool(
-                        last_tea_text_hidden_state, last_tea_text_attn
-                    )
-                    stu_vision_pooled_rep = self.attention_pool(
-                        last_stu_vision_hidden_state, last_stu_vision_attn
-                    )
-                    tea_vision_pooled_rep = self.attention_pool(
-                        last_tea_vision_hidden_state, last_tea_vision_attn
-                    )
+            img_proj = projectors["t2s_img"]
+            txt_proj = projectors["t2s_txt"]
 
-                    # print('============================')
-                    # print('stu_text_pooled_rep.shape:', stu_text_pooled_rep.shape)
-                    # print('tea_text_pooled_rep.shape:', tea_text_pooled_rep.shape)
-                    # print('stu_vision_pooled_rep.shape:', stu_vision_pooled_rep.shape)
-                    # print('tea_vision_pooled_rep.shape:', tea_vision_pooled_rep.shape)
+            tv = img_proj(tv.to(next(img_proj.parameters()).dtype))
+            tt = txt_proj(tt.to(next(txt_proj.parameters()).dtype))
 
-                    stu_text_pooled_reps.append(stu_text_pooled_rep)  # [D]
-                    tea_text_pooled_reps.append(tea_text_pooled_rep)  # [D]
-                    stu_vision_pooled_reps.append(stu_vision_pooled_rep)  # [D]
-                    tea_vision_pooled_reps.append(tea_vision_pooled_rep)  # [D]
-
-            # 2. POSITIVE Processing (Tương tự Query)
-            if student_pos_image_features is not None and teacher_pos_image_features is not None:
-                if cur_idx_pos_img < len(student_pos_image_features) and cur_idx_pos_img < len(teacher_pos_image_features):
-                    # --- Vision ---
-                    stu_feat_pos = student_pos_image_features[cur_idx_pos_img]
-                    tea_feat_pos = teacher_pos_image_features[cur_idx_pos_img]
-                    cur_idx_pos_img += 1
-                    last_stu_text_hidden_state, last_stu_vision_hidden_state = get_hidden_text_vision(
-                        student_pos_hidden_states[-1][i],
-                        num_student_text_pos_tokens[i].item(),
-                        stu_feat_pos.size(0),
-                        student_pos_input['attention_mask'][i]
-                    )
-
-                    last_stu_text_attn, last_stu_vision_attn = get_attn_text_vision(
-                        stu_last_mean_attn_pos[i],
-                        num_student_text_pos_tokens[i].item(),
-                        stu_feat_pos.size(0),
-                        student_pos_input['attention_mask'][i]
-                    )
-
-                    last_tea_text_hidden_state, last_tea_vision_hidden_state = get_hidden_text_vision(
-                        teacher_pos_hidden_states[-1][i],
-                        num_teacher_text_pos_tokens[i].item(),
-                        tea_feat_pos.size(0),
-                        teacher_pos_input['attention_mask'][i]
-                    )
-
-                    last_tea_text_attn, last_tea_vision_attn = get_attn_text_vision(
-                        tea_last_mean_attn_pos[i],
-                        num_teacher_text_pos_tokens[i].item(),
-                        tea_feat_pos.size(0),
-                        teacher_pos_input['attention_mask'][i]
-                    )
-
-                    stu_text_pooled_rep = self.attention_pool(
-                        last_stu_text_hidden_state, last_stu_text_attn
-                    )
-                    tea_text_pooled_rep = self.attention_pool(
-                        last_tea_text_hidden_state, last_tea_text_attn
-                    )
-                    stu_vision_pooled_rep = self.attention_pool(
-                        last_stu_vision_hidden_state, last_stu_vision_attn
-                    )
-                    tea_vision_pooled_rep = self.attention_pool(
-                        last_tea_vision_hidden_state, last_tea_vision_attn
-                    )
-
-                    # print('============================')
-                    # print('stu_text_pooled_rep.shape:', stu_text_pooled_rep.shape)
-                    # print('tea_text_pooled_rep.shape:', tea_text_pooled_rep.shape)
-                    # print('stu_vision_pooled_rep.shape:', stu_vision_pooled_rep.shape)
-                    # print('tea_vision_pooled_rep.shape:', tea_vision_pooled_rep.shape)
-
-                    stu_text_pooled_reps.append(stu_text_pooled_rep)  # [D]
-                    tea_text_pooled_reps.append(tea_text_pooled_rep)  # [D]
-                    stu_vision_pooled_reps.append(stu_vision_pooled_rep)  # [D]
-                    tea_vision_pooled_reps.append(tea_vision_pooled_rep)  # [D]
-
-        stu_vision_pooled_reps = torch.stack(stu_vision_pooled_reps, dim=0)  # [B, D]
-        tea_vision_pooled_reps = torch.stack(tea_vision_pooled_reps, dim=0)  # [B, D]
-        stu_text_pooled_reps = torch.stack(stu_text_pooled_reps, dim=0)      # [B, D]
-        tea_text_pooled_reps = torch.stack(tea_text_pooled_reps, dim=0)      # [B, D]
-
-        proj_tea_vision_pooled_reps = projectors['t2s_img'](tea_vision_pooled_reps)
-        proj_tea_text_pooled_reps = projectors['t2s_txt'](tea_text_pooled_reps)
-
-        # Tính loss giữa các đại diện đã được projector
-        intra_loss = self.mi_loss(stu_vision_pooled_reps, proj_tea_vision_pooled_reps) + self.mi_loss(stu_text_pooled_reps, proj_tea_text_pooled_reps)
-        inter_loss = self.mi_loss(stu_vision_pooled_reps, proj_tea_text_pooled_reps) + self.mi_loss(stu_text_pooled_reps, proj_tea_vision_pooled_reps)
+            intra_loss = self.mi_loss(sv, tv) + self.mi_loss(st, tt)
+            inter_loss = self.mi_loss(sv, tt) + self.mi_loss(st, tv)
 
         scl_loss = intra_loss + inter_loss
 

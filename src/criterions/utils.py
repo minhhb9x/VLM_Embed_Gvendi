@@ -162,3 +162,131 @@ def build_center_relative_grid(h, w, device=None, dtype=torch.float32):
     grid_y, grid_x = torch.meshgrid(ys, xs, indexing="ij")
     grid = torch.stack([grid_y, grid_x], dim=-1)
     return grid
+
+
+def extract_modality_tokens(
+    tokenizer, inputs, image_features, attention_matrix,
+    output_hidden_states, backbone, *, padding_side=None,
+):
+    """Return one dict per sample: text/image [L,N,D], last_token [L,D].
+
+    L excludes the initial embedding layer. Tokens retain their original order.
+    ``image_features`` is only required for FastVLM samples containing -200.
+    ``padding_side`` can override the model-side padding used by FastVLM.
+    """
+    proc = tokenizer
+    tok = getattr(proc, "tokenizer", proc)
+    hs = getattr(output_hidden_states, "hidden_states", output_hidden_states)
+    if not isinstance(hs, (tuple, list)) or not hs:
+        raise ValueError("output_hidden_states must be a nonempty tuple/list")
+
+    attns = attention_matrix if isinstance(attention_matrix, (tuple, list)) else None
+    # Hugging Face normally returns: embedding state + one state per layer.
+    layers = hs[1:] if len(hs) > 1 and (attns is None or len(hs) == len(attns) + 1) else hs
+    B, S, _ = layers[0].shape
+    device = layers[0].device
+    ids = inputs["input_ids"].to(device)
+    valid = inputs.get("attention_mask")
+    valid = valid.to(device).bool() if valid is not None else torch.ones_like(ids, dtype=torch.bool)
+    if ids.shape != valid.shape or ids.shape[0] != B:
+        raise ValueError("Batch mismatch between input_ids, attention_mask, hidden states")
+
+    fast = backbone in {"llava_qwen2", "llava_qwen2_old"}
+    if fast:
+        image_id = -200
+        if image_features is None:
+            feats = []
+        elif torch.is_tensor(image_features):
+            feats = list(image_features) if image_features.ndim == 3 else [image_features]
+        else:
+            feats = list(image_features)
+
+        if padding_side is None:
+            has_left = bool(((~valid[:, 0]) & valid[:, -1]).any())
+            has_right = bool((valid[:, 0] & (~valid[:, -1])).any())
+            if has_left and has_right:
+                raise ValueError("Mixed left/right padding; set padding_side explicitly")
+            padding_side = "left" if has_left else "right" if has_right else getattr(tok, "padding_side", "right")
+        if padding_side not in {"left", "right"}:
+            raise ValueError("padding_side must be 'left' or 'right'")
+    else:
+        names = {
+            "internvl_chat": "<IMG_CONTEXT>",
+            "llava_next": "<image>",
+            "llava_onevision": "<image>",
+            "llava_onevision_old": "<image>",
+        }
+        if backbone.startswith("qwen") or backbone in {"gme", "lamra"}:
+            token_name = "<|image_pad|>"
+        else:
+            token_name = names.get(backbone)
+        if token_name is None:
+            raise ValueError(f"Unsupported backbone: {backbone}")
+        image_id = getattr(proc, "img_context_token_id", None) if backbone == "internvl_chat" else None
+        if image_id is None:
+            image_id = getattr(proc, "image_token_id", None)
+        if image_id is None:
+            image_id = getattr(tok, "image_token_id", None)
+        if image_id is None:
+            image_id = tok.convert_tokens_to_ids(getattr(proc, "image_token", token_name))
+        if not isinstance(image_id, int) or image_id < 0 or image_id == getattr(tok, "unk_token_id", None):
+            raise ValueError(f"Could not resolve image token ID for {backbone}")
+        if S != ids.shape[1]:
+            raise ValueError(f"{backbone}: hidden length {S} != input_ids length {ids.shape[1]}")
+
+    results, cursor = [], 0
+    for b in range(B):
+        token_ids = ids[b, valid[b]]
+        if token_ids.numel() == 0:
+            raise ValueError(f"Sample {b} has no valid tokens")
+        # 0 = padding/last, 1 = text (including special tokens), 2 = image.
+        labels = torch.ones_like(token_ids, dtype=torch.long)
+
+        if fast:
+            locations = torch.where(token_ids == image_id)[0]
+            if locations.numel() > 1:
+                raise ValueError("FastVLM currently expects <=1 image placeholder per sample")
+            if locations.numel():
+                if cursor >= len(feats) or feats[cursor] is None:
+                    raise ValueError("FastVLM image_features missing for a sample with -200")
+                count = feats[cursor].shape[0]
+                cursor += 1
+                pos = int(locations[0])
+                labels = torch.cat([labels[:pos], labels.new_full((count,), 2), labels[pos + 1:]])
+            # llava_arch.py truncates the expanded sequence from the right.
+            labels = labels[:S]
+            n = labels.numel()
+            expanded = labels.new_zeros(S)
+            offset = S - n if padding_side == "left" else 0
+            expanded[offset:offset + n] = labels
+            last = offset + n - 1
+        else:
+            labels[token_ids == image_id] = 2
+            expanded = labels.new_zeros(S)
+            expanded[valid[b]] = labels
+            last = int(torch.where(valid[b])[0][-1])
+
+        expanded[last] = 0  # Last valid token is the representation token.
+        text_idx = torch.where(expanded == 1)[0]
+        image_idx = torch.where(expanded == 2)[0]
+        item = {
+            "text": torch.stack([h[b, text_idx] for h in layers]),
+            "image": torch.stack([h[b, image_idx] for h in layers]),
+            "last_token": torch.stack([h[b, last] for h in layers]),
+            "text_indices": text_idx,
+            "image_indices": image_idx,
+            "last_index": last,
+            "text_attention": None,
+            "image_attention": None,
+        }
+        if attns is not None and len(attns) == len(layers) and all(
+            a is not None and a.ndim == 4 and a.shape[-2:] == (S, S) for a in attns
+        ):
+            rows = torch.stack([a[b].float().mean(0)[last] for a in attns])
+            item["text_attention"] = rows[:, text_idx]
+            item["image_attention"] = rows[:, image_idx]
+        results.append(item)
+
+    if fast and cursor != len(feats):
+        raise ValueError(f"FastVLM used {cursor}/{len(feats)} image feature entries")
+    return results
