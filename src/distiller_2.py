@@ -341,6 +341,12 @@ class DistillationDataset(Dataset):
     def __init__(self, data_args, model_args):
         self.data_args = data_args
         self.model_args = model_args
+        # Local CSV adapter keeps the existing image loader and collator schema.
+        from src.flickr30k_data import is_flickr30k, Flickr30kPairs
+        if is_flickr30k(data_args.dataset_name):
+            self.train_data = Flickr30kPairs(data_args)
+            print_rank(f"Loaded {len(self.train_data)} Flickr30k images ({data_args.dataset_split})")
+            return
         train_data = []
         
         for subset in data_args.subset_name:

@@ -1,10 +1,10 @@
 import torch
 
-x = torch.load("infer/rkd_meta_llavaov_cls_tiny/ImageNet-1K/query/00000000.pt")
-y = torch.load("infer/FastVLM-0.5B_base_b16_cls/ImageNet-1K/query/00000000.pt")
+path = "caching/Qwen3VL_8B/ImageNet_1K/0/qry.pt"
+cache = torch.load(path, map_location="cpu", weights_only=True)
 
-print(x['hidden_shape'])
-
-print('===============================')
-
-print(y['hidden_shape'])
+for key, value in cache.items():
+    print(f"\n{key}:")
+    if torch.is_tensor(value):
+        print(f"shape={tuple(value.shape)}, dtype={value.dtype}")
+    print(value)
