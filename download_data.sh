@@ -10,3 +10,8 @@ rm OK-VQA.zip
 wget https://huggingface.co/datasets/TIGER-Lab/MMEB-train/resolve/main/images_zip/VOC2007.zip
 unzip VOC2007.zip -d ./vlm2vec_train/MMEB-train/images/
 rm VOC2007.zip
+
+hf download nlphuji/flickr30k \
+    --repo-type dataset \
+    --local-dir vlm2vec_external/flickr30k
+unzip vlm2vec_external/flickr30k/flickr30k-images.zip -d vlm2vec_external/flickr30k/

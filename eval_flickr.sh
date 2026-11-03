@@ -1,0 +1,14 @@
+CUDA_VISIBLE_DEVICES=1 python eval_flickr.py \
+    --model_name "raghavlite/B3_Qwen2_2B" \
+    --model_backbone qwen2_vl \
+    --lora True \
+    --lora_r 8 \
+    --pooling eos \
+    --normalize True \
+    --bf16 \
+    --dataset_name "nlphuji/flickr30k" \
+    --dataset_split test \
+    --image_dir "vlm2vec_external/flickr30k" \
+    --per_device_eval_batch_size 8 \
+    --encode_output_path "MMEB-eval_outputs/B3-Qwen2-2B_test" \
+    --report_to none
