@@ -5,7 +5,7 @@ NUM_GPUS_PER_NODE=1
 PORT=12345
 
 # Đường dẫn tới file script training của bạn
-TRAIN_SCRIPT="train_distill_ddp_2.py"
+TRAIN_SCRIPT="train_distill_ddp.py"
 
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 
@@ -24,7 +24,7 @@ torchrun --master_port=$PORT \
     --teacher_lora_r 8 \
     --teacher_pooling "eos" \
     --teacher_backbone "qwen2_vl" \
-    --model_backbone "llava_onevision_old" \
+    --model_backbone "llava_onevision" \
     --pooling "eos" \
     --dataset_name "TIGER-Lab/MMEB-train" \
     --subset_name "MSCOCO" \
@@ -81,14 +81,14 @@ do
 
     rm -rf "$OUTPUT_PATH"
 
-    python eval_mmeb_2.py \
+    python eval_mmeb.py \
       --model_name "training/B3-Qwen2-7B_Llava-OV-0.5B_pga_grounding/checkpoint-epoch-0" \
       --encode_output_path "$OUTPUT_PATH" \
       --lora True \
       --lora_r 64 \
       --lora_alpha 64 \
       --pooling eos \
-      --model_backbone llava_onevision_old \
+      --model_backbone llava_onevision \
       --normalize True \
       --bf16 \
       --dataset_name TIGER-Lab/MMEB-eval \

@@ -1,10 +1,10 @@
 {
     "t2s_img": {
-        "enabled": true,
+        "enabled": false,
         "structure": "t-s"
     },
     "t2s_txt": {
-        "enabled": true,
+        "enabled": false,
         "structure": "t-s"
     },
     "t2s":{

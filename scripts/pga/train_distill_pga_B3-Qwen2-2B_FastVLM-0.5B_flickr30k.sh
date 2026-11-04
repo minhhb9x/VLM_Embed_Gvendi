@@ -5,7 +5,7 @@ NUM_GPUS_PER_NODE=1
 PORT=12345
 
 # Chạy script này từ thư mục gốc repository.
-TRAIN_SCRIPT="train_distill_ddp_2.py"
+TRAIN_SCRIPT="train_distill_ddp.py"
 
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 
@@ -24,7 +24,7 @@ torchrun --standalone \
     --teacher_lora_r "8" \
     --teacher_pooling "eos" \
     --teacher_backbone "qwen2_vl" \
-    --model_backbone "llava_qwen2_old" \
+    --model_backbone "llava_qwen2" \
     --pooling "eos" \
     --dataset_name "nlphuji/flickr30k" \
     --dataset_split "train" \
@@ -70,7 +70,7 @@ python evaluation/mmeb_baselines/eval_flickr.py \
     --lora_r "64" \
     --lora_alpha "64" \
     --pooling "eos" \
-    --model_backbone "llava_qwen2_old" \
+    --model_backbone "llava_qwen2" \
     --normalize "True" \
     --bf16 \
     --dataset_name "nlphuji/flickr30k" \

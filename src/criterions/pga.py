@@ -266,64 +266,67 @@ class PGA(nn.Module):
         # mse_loss = nn.MSELoss()(torch.cat([all_student_qry_reps, all_student_pos_reps], dim=0), 
         #                         torch.cat([proj_teacher_qry_reps, proj_teacher_pos_reps], dim=0))
         
-        stu_qry = extract_modality_tokens(
-            student_processor, student_qry_input, student_qry_image_features,
-            student_qry_attention, student_qry_hidden_states, student_model.model_backbone
-        )
-        stu_pos = extract_modality_tokens(
-            student_processor, student_pos_input, student_pos_image_features,
-            student_pos_attention, student_pos_hidden_states, student_model.model_backbone
-        )
-        tea_qry = extract_modality_tokens(
-            teacher_processor, teacher_qry_input, teacher_qry_image_features,
-            teacher_qry_attention, teacher_qry_hidden_states, teacher_model.model_backbone
-        )
-        tea_pos = extract_modality_tokens(
-            teacher_processor, teacher_pos_input, teacher_pos_image_features,
-            teacher_pos_attention, teacher_pos_hidden_states, teacher_model.model_backbone
-        )
-
-        stu_img, tea_img, stu_txt, tea_txt = [], [], [], []
-
-        for s_batch, t_batch in ((stu_qry, tea_qry), (stu_pos, tea_pos)):
-            for s, t in zip(s_batch, t_batch):
-
-                # Skip if either model has an empty modality
-                if any(x[k].size(1) == 0 for x in (s, t) for k in ("image", "text")):
-                    continue
-
-                for sample, key, buffer in (
-                    (s, "image", stu_img),
-                    (t, "image", tea_img),
-                    (s, "text", stu_txt),
-                    (t, "text", tea_txt),
-                ):
-                    hidden = sample[key][-1]             # [N, D]
-                    attn = sample[f"{key}_attention"]
-
-                    pooled = (
-                        self.attention_pool(hidden, attn[-1])
-                        if attn is not None else hidden.mean(dim=0)
-                    )
-                    buffer.append(pooled)
-
 
         intra_loss = contrastive_loss.new_zeros(())
         inter_loss = contrastive_loss.new_zeros(())
 
-        if len(stu_img) > 1:
-            sv, tv, st, tt = [
-                torch.stack(x) for x in (stu_img, tea_img, stu_txt, tea_txt)
-            ]
+        # stu_qry = extract_modality_tokens(
+        #     student_processor, student_qry_input, student_qry_image_features,
+        #     student_qry_attention, student_qry_hidden_states, student_model.model_backbone
+        # )
+        # stu_pos = extract_modality_tokens(
+        #     student_processor, student_pos_input, student_pos_image_features,
+        #     student_pos_attention, student_pos_hidden_states, student_model.model_backbone
+        # )
+        # tea_qry = extract_modality_tokens(
+        #     teacher_processor, teacher_qry_input, teacher_qry_image_features,
+        #     teacher_qry_attention, teacher_qry_hidden_states, teacher_model.model_backbone
+        # )
+        # tea_pos = extract_modality_tokens(
+        #     teacher_processor, teacher_pos_input, teacher_pos_image_features,
+        #     teacher_pos_attention, teacher_pos_hidden_states, teacher_model.model_backbone
+        # )
 
-            img_proj = projectors["t2s_img"]
-            txt_proj = projectors["t2s_txt"]
+        # stu_img, tea_img, stu_txt, tea_txt = [], [], [], []
 
-            tv = img_proj(tv.to(next(img_proj.parameters()).dtype))
-            tt = txt_proj(tt.to(next(txt_proj.parameters()).dtype))
+        # for s_batch, t_batch in ((stu_qry, tea_qry), (stu_pos, tea_pos)):
+        #     for s, t in zip(s_batch, t_batch):
 
-            intra_loss = self.mi_loss(sv, tv) + self.mi_loss(st, tt)
-            inter_loss = self.mi_loss(sv, tt) + self.mi_loss(st, tv)
+        #         # Skip if either model has an empty modality
+        #         if any(x[k].size(1) == 0 for x in (s, t) for k in ("image", "text")):
+        #             continue
+
+        #         for sample, key, buffer in (
+        #             (s, "image", stu_img),
+        #             (t, "image", tea_img),
+        #             (s, "text", stu_txt),
+        #             (t, "text", tea_txt),
+        #         ):
+        #             hidden = sample[key][-1]             # [N, D]
+        #             attn = sample[f"{key}_attention"]
+
+        #             pooled = (
+        #                 self.attention_pool(hidden, attn[-1])
+        #                 if attn is not None else hidden.mean(dim=0)
+        #             )
+        #             buffer.append(pooled)
+
+
+
+
+        # if len(stu_img) > 1:
+        #     sv, tv, st, tt = [
+        #         torch.stack(x) for x in (stu_img, tea_img, stu_txt, tea_txt)
+        #     ]
+
+        #     img_proj = projectors["t2s_img"]
+        #     txt_proj = projectors["t2s_txt"]
+
+        #     tv = img_proj(tv.to(next(img_proj.parameters()).dtype))
+        #     tt = txt_proj(tt.to(next(txt_proj.parameters()).dtype))
+
+        #     intra_loss = self.mi_loss(sv, tv) + self.mi_loss(st, tt)
+        #     inter_loss = self.mi_loss(sv, tt) + self.mi_loss(st, tv)
 
         scl_loss = intra_loss + inter_loss
 
@@ -333,7 +336,7 @@ class PGA(nn.Module):
 
         kd_loss = (mse_loss + 0.5*scl_loss + pga_loss)
         
-        loss = contrastive_loss + self.kd_loss_weight * kd_loss
+        loss = contrastive_loss +  kd_loss
 
         return {
             'loss': loss,
