@@ -1,6 +1,6 @@
-CUDA_VISIBLE_DEVICES=1 python eval_flickr.py \
-    --model_name "raghavlite/B3_Qwen2_2B" \
-    --model_backbone qwen2_vl \
+CUDA_VISIBLE_DEVICES=0 python eval_flickr.py \
+    --model_name training/FastVLM-0.5B_vqa_struct_sigreg_SW_gmm_d1_sig1_kd10_sw0.1_numt17_tmax5_l24/checkpoint-epoch-0 \
+    --model_backbone llava_qwen2 \
     --lora True \
     --lora_r 8 \
     --pooling eos \
@@ -9,6 +9,6 @@ CUDA_VISIBLE_DEVICES=1 python eval_flickr.py \
     --dataset_name "nlphuji/flickr30k" \
     --dataset_split test \
     --image_dir "vlm2vec_external/flickr30k" \
-    --per_device_eval_batch_size 8 \
-    --encode_output_path "MMEB-eval_outputs/B3-Qwen2-2B_test" \
+    --per_device_eval_batch_size 16 \
+    --encode_output_path "MMEB-eval_outputs/FastVLM-0.5B_vqa_struct_sigreg_SW_gmm_d1_sig1_kd10_sw0.1_numt17_tmax5_l24" \
     --report_to none

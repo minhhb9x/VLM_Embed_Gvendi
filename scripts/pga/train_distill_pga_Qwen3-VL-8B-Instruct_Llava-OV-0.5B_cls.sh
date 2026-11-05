@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 # Số lượng GPU trên mỗi node (máy)
-NUM_GPUS_PER_NODE=2
+NUM_GPUS_PER_NODE=1
 PORT=12345
 
 # Đường dẫn tới file script training của bạn
