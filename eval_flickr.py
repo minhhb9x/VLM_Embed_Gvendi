@@ -12,6 +12,7 @@ import pickle
 import sys
 from pathlib import Path
 
+from collections.abc import Mapping
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
@@ -100,6 +101,8 @@ def to_device(value, device):
         return value.to(device)
     if isinstance(value, dict):
         return {key: to_device(item, device) for key, item in value.items()}
+    if isinstance(value, Mapping):
+        return {key: to_device(item, device) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return type(value)(to_device(item, device) for item in value)
     return value
@@ -128,7 +131,9 @@ def recall_at_k(query, gallery, query_names, gallery_names):
         retrieved = [gallery_names[index] for index in indices.tolist()]
         for k in hits:
             hits[k] += name in retrieved[:k]
-    return {f"R@{k}": count / len(query) for k, count in hits.items()}
+    metrics = {f"R@{k}": count / len(query) for k, count in hits.items()}
+    metrics["P@1"] = metrics["R@1"]
+    return metrics
 
 
 def main():

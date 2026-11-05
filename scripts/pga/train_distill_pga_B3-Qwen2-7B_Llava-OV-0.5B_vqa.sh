@@ -103,3 +103,33 @@ do
       --report_to none
 
 done
+
+
+FLICKR_EVAL_BATCH_SIZE=16
+
+for FLICKR_BATCH_SIZE in \
+    "$FLICKR_EVAL_BATCH_SIZE" \
+    "$((FLICKR_EVAL_BATCH_SIZE - 1))" \
+    "$((FLICKR_EVAL_BATCH_SIZE - 2))"
+do
+    FLICKR_OUTPUT_PATH="${OUTPUT_BASE}_flickr30k_b${FLICKR_BATCH_SIZE}"
+
+    echo "Evaluating Flickr30k with batch size $FLICKR_BATCH_SIZE"
+
+    python eval_flickr.py \
+        --model_name "training/B3-Qwen2-7B_Llava-OV-0.5B_pga_vqa/checkpoint-epoch-0" \
+        --encode_output_path "$FLICKR_OUTPUT_PATH" \
+        --lora True \
+        --lora_r 64 \
+        --lora_alpha 64 \
+        --pooling eos \
+        --model_backbone llava_onevision \
+        --normalize True \
+        --bf16 \
+        --dataset_name "nlphuji/flickr30k" \
+        --dataset_split test \
+        --image_dir "vlm2vec_external/flickr30k" \
+        --image_resolution "tiny" \
+        --per_device_eval_batch_size "$FLICKR_BATCH_SIZE" \
+        --report_to none
+done
