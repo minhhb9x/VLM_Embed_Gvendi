@@ -36,6 +36,7 @@ from .span_attn_sigreg import SpanSigregCriterionWeighted
 from .gvendi import GVENDILoss
 
 from .pga import PGA
+from .pga2 import PGA2
 
 criterion_list = {
     "contrastive": ContrastiveLoss,
@@ -78,6 +79,7 @@ criterion_list = {
     "gvendi": GVENDILoss,
 
     "pga": PGA,  # PGA is a special case, it is not a criterion but a framework that can use multiple criteria
+    "pga2": PGA2,
 }
 
 def build_criterion(args):
