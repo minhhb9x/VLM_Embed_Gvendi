@@ -172,7 +172,7 @@ def build_cache_obj(rep, inputs, hidden_states, image_features, special_ids_tens
     )
 
     return to_device({
-        "rep": rep[idx].float(),
+        "rep": rep[idx].float().cpu(),
         "mean_last_img_token": mean_or_none(image_hidden),
         "mean_last_text_token": mean_or_none(text_hidden),
     }, 'cpu')
