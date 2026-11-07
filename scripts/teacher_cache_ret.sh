@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Số lượng GPU trên mỗi node (máy)
-NUM_GPUS_PER_NODE=1
+NUM_GPUS_PER_NODE=2
 
 # Đường dẫn tới file script training của bạn
 TRAIN_SCRIPT="teacher_cache.py"
@@ -18,7 +18,7 @@ SUBSETS=(
 # =========================================================================
 # Dùng torchrun để khởi chạy
 # =========================================================================
-CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=$NUM_GPUS_PER_NODE \
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=$NUM_GPUS_PER_NODE \
     $TRAIN_SCRIPT \
     --model_name raghavlite/B3_Qwen2_2B \
     --lora True \
@@ -31,7 +31,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=$NUM_GPUS_PER_NODE \
     --dataset_split "original" \
     --image_dir "vlm2vec_train/MMEB-train" \
     --output_dir "caching/B3_Qwen2_2B_ret" \
-    --per_device_train_batch_size 8 \
+    --per_device_train_batch_size 4 \
     --seed 42 \
     --normalize False \
     --report_to "none" 

@@ -2,7 +2,7 @@ import os
 import torch
 from tqdm import tqdm
 
-BASE_ROOT = "caching/Qwen3VL_8B"
+BASE_ROOT = "caching/B3_Qwen2_2B_ret"
 
 subsets = sorted([
     x for x in os.listdir(BASE_ROOT)

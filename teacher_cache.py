@@ -17,7 +17,7 @@ from src.model.model import MMEBModel
 from src.model.processor import load_processor
 from src.single_wrapper import SingleCollator, SingleDataset
 from src.utils import print_rank
-
+import logging
 
 def seed_everything(seed: int, rank: int = 0):
     seed = seed + rank
@@ -154,29 +154,60 @@ def mean_or_none(hidden_tokens):
     return hidden_tokens.float().mean(dim=0).cpu()
 
 
-def build_cache_obj(rep, inputs, hidden_states, image_features, special_ids_tensor, idx):
-    num_image_tokens = count_image_tokens(image_features, idx)
-    num_text_tokens = count_text_tokens(inputs, special_ids_tensor, idx)
-    last_hidden_state = hidden_states[-1][idx]
-    token_slice = get_clean_token_slice(
-        inputs["attention_mask"][idx],
-        last_hidden_state.size(0),
-        num_text_tokens,
-        num_image_tokens,
-    )
-    image_hidden, text_hidden = split_last_hidden_tokens(
-        last_hidden_state,
-        token_slice,
-        num_image_tokens,
-        num_text_tokens,
-    )
+def build_cache_obj(
+    rep, inputs, hidden_states, image_features,
+    special_ids_tensor, idx, cache_path=None,
+):
+    num_image_tokens = None
+    num_text_tokens = None
 
-    return to_device({
-        "rep": rep[idx].float().cpu(),
-        "mean_last_img_token": mean_or_none(image_hidden),
-        "mean_last_text_token": mean_or_none(text_hidden),
-    }, 'cpu')
+    try:
+        num_image_tokens = count_image_tokens(image_features, idx)
+        num_text_tokens = count_text_tokens(inputs, special_ids_tensor, idx)
+        last_hidden_state = hidden_states[-1][idx]
 
+        token_slice = get_clean_token_slice(
+            inputs["attention_mask"][idx],
+            last_hidden_state.size(0),
+            num_text_tokens,
+            num_image_tokens,
+        )
+        image_hidden, text_hidden = split_last_hidden_tokens(
+            last_hidden_state,
+            token_slice,
+            num_image_tokens,
+            num_text_tokens,
+        )
+
+        return {
+            "rep": rep[idx].float().cpu(),
+            "mean_last_img_token": mean_or_none(image_hidden),
+            "mean_last_text_token": mean_or_none(text_hidden),
+        }
+
+    except Exception:
+        logging.exception(
+            "[rank %s] Cache failed: %s\n"
+            "idx=%s, image_tokens=%s, text_tokens=%s\n"
+            "rep_shape=%s, input_ids_shape=%s\n"
+            "hidden_shapes=%s\n"
+            "image_features_shapes=%s\n"
+            "valid_tokens_per_sample=%s",
+            get_rank(),
+            cache_path,
+            idx,
+            num_image_tokens,
+            num_text_tokens,
+            tuple(rep.shape),
+            tuple(inputs["input_ids"].shape),
+            [tuple(h.shape) for h in hidden_states],
+            None if image_features is None else [
+                tuple(f.shape) if f is not None else None
+                for f in image_features
+            ],
+            inputs["attention_mask"].sum(dim=1).tolist(),
+        )
+        raise
 
 class DistributedSequentialSampler(Sampler):
     def __init__(self, dataset, rank, world_size):
@@ -314,6 +345,7 @@ def build_dataloader(model_args, data_args, training_args):
         collate_fn=collator,
         drop_last=False,
         pin_memory=False,
+        num_workers=16,
     )
 
 
