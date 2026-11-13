@@ -28,29 +28,29 @@ from transformers.image_transforms import (
 # token_img = QWEN2_VL
 
 
-# model_args = ModelArguments(
-#     model_name='apple/FastVLM-0.5B',
-#     pooling='last',
-#     normalize=True,
-#     model_backbone=LLAVA_QWEN2,
-#     lora=True,
-# )
-# process_fn = FastVLM_process_fn
-# token_img = LLAVA_QWEN2
-
-
 model_args = ModelArguments(
-    model_name='llava-hf/llava-onevision-qwen2-0.5b-ov-hf',
+    model_name='apple/FastVLM-0.5B',
     pooling='last',
     normalize=True,
-    model_backbone=LLAVA_ONEVISION,
-    # lora=True,
+    model_backbone=LLAVA_QWEN2,
+    lora=True,
 )
-data_args = DataArguments(
-    image_resolution = 'tiny'
-)
-process_fn = Llava_ONEVISION_process_fn
-token_img = LLAVA_ONEVISION
+process_fn = FastVLM_process_fn
+token_img = LLAVA_QWEN2
+
+
+# model_args = ModelArguments(
+#     model_name='llava-hf/llava-onevision-qwen2-0.5b-ov-hf',
+#     pooling='last',
+#     normalize=True,
+#     model_backbone=LLAVA_ONEVISION,
+#     # lora=True,
+# )
+# data_args = DataArguments(
+#     image_resolution = 'tiny'
+# )
+# process_fn = Llava_ONEVISION_process_fn
+# token_img = LLAVA_ONEVISION
 
 
 # model_args = ModelArguments(
@@ -75,7 +75,7 @@ model.eval()
 processor_inputs = {
     "text": [f'Represent the given image with the following question: What is in the image {VLM_IMAGE_TOKENS[token_img]}',
           f'Represent the given image with the following question: What is in the image'],
-    "images": [Image.open('example.jpg').resize((336, 336))],
+    "images": [Image.open('example.jpg').resize((336, 336)), None],
 }
 
 inputs = process_fn(
@@ -85,46 +85,46 @@ inputs = process_fn(
     )
 inputs = batch_to_device(inputs, "cuda")
 
-decoded_texts = processor.tokenizer.batch_decode(
-    inputs["input_ids"].cpu(),
-    skip_special_tokens=False,
-    clean_up_tokenization_spaces=False,
-)
+# decoded_texts = processor.tokenizer.batch_decode(
+#     inputs["input_ids"].cpu(),
+#     skip_special_tokens=False,
+#     clean_up_tokenization_spaces=False,
+# )
 
-print(inputs.keys())
-for i, text in enumerate(decoded_texts):
-    print(f"\n{'=' * 30} SAMPLE {i} {'=' * 30}")
-    print(text)
+# print(inputs.keys())
+# for i, text in enumerate(decoded_texts):
+#     print(f"\n{'=' * 30} SAMPLE {i} {'=' * 30}")
+#     print(text)
 
 
-tok = processor.tokenizer
-ids = inputs["input_ids"].cpu()
-mask = inputs["attention_mask"].cpu()
+# tok = processor.tokenizer
+# ids = inputs["input_ids"].cpu()
+# mask = inputs["attention_mask"].cpu()
 
-tok = processor.tokenizer
+# tok = processor.tokenizer
 
-prompt = processor.apply_chat_template(
-    [
-        {"role": "system", "content": "Represent the user's input."},
-        {"role": "user", "content": "Hello"},
-    ],
-    tokenize=False,
-    add_generation_prompt=True,
-)
+# prompt = processor.apply_chat_template(
+#     [
+#         {"role": "system", "content": "Represent the user's input."},
+#         {"role": "user", "content": "Hello"},
+#     ],
+#     tokenize=False,
+#     add_generation_prompt=True,
+# )
 
-print("After chat template:", repr(prompt[-80:]))
+# print("After chat template:", repr(prompt[-80:]))
 
-for add_special in [False, True]:
-    ids = tok(
-        prompt,
-        add_special_tokens=add_special,
-    )["input_ids"]
+# for add_special in [False, True]:
+#     ids = tok(
+#         prompt,
+#         add_special_tokens=add_special,
+#     )["input_ids"]
 
-    print(
-        f"add_special_tokens={add_special}:",
-        tok.convert_ids_to_tokens(ids[-5:]),
-    )
+#     print(
+#         f"add_special_tokens={add_special}:",
+#         tok.convert_ids_to_tokens(ids[-5:]),
+#     )
 
-# output = model.encode_input(inputs)[0]
+output = model.encode_input(inputs)[0]
 
-# print(output.shape)
+print(output.shape)
