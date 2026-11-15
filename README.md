@@ -45,10 +45,10 @@ python fix_lib.py
 ## Training
 
 Just run the scripts in folder `scripts`
-- For run RKD: 
+- For run IDR: 
 ```bash
-bash scripts/train_RKD.sh
-bash scripts/train_distill_propose_V.sh
+bash scripts/idr_kd/train_B3-Qwen2-2B_FastVLM-0.5B_idr_cls.sh
+bash scripts/idr_kd/train_B3-Qwen2-2B_FastVLM-0.5B_idr_vqa.sh
 ```
 ## Inference & Evaluation
 1. To evaluate our model on an MMEB dataset (e.g., MSCOCO_i2t), run:

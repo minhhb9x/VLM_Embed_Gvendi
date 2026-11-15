@@ -37,6 +37,7 @@ from .gvendi import GVENDILoss
 
 from .pga import PGA
 from .pga2 import PGA2
+from .eos_er_combined_loss import EOSERCombinedLoss
 
 criterion_list = {
     "contrastive": ContrastiveLoss,
@@ -80,6 +81,7 @@ criterion_list = {
 
     "pga": PGA,  # PGA is a special case, it is not a criterion but a framework that can use multiple criteria
     "pga2": PGA2,
+    "eos_er_combined_loss": EOSERCombinedLoss,
 }
 
 def build_criterion(args):

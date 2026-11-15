@@ -19,16 +19,16 @@ files = {
     # "InfographicsVQA": "images_zip/InfographicsVQA.zip",
     # "ChartQA": "images_zip/ChartQA.zip",
     # "Visual7W": "images_zip/Visual7W.zip",
-    # "MSCOCO": "images_zip/MSCOCO.zip",
+    "MSCOCO": "images_zip/MSCOCO.zip",
 
-    "VisDial": "images_zip/VisDial.zip",
-    "CIRR": "images_zip/CIRR.zip",
-    "VisualNews_t2i": "images_zip/VisualNews_t2i.zip",
-    "VisualNews i2t": "images_zip/VisualNews_i2t.zip",
-    "MSCOCO t2i": "images_zip/MSCOCO_t2i.zip",
-    "MSCOCO i2t ": "images_zip/MSCOCO_i2t.zip",
-    "NIGHTS": "images_zip/NIGHTS.zip",
-    "WebQA": "images_zip/WebQA.zip",
+    # "VisDial": "images_zip/VisDial.zip",
+    # "CIRR": "images_zip/CIRR.zip",
+    # "VisualNews_t2i": "images_zip/VisualNews_t2i.zip",
+    # "VisualNews i2t": "images_zip/VisualNews_i2t.zip",
+    # "MSCOCO t2i": "images_zip/MSCOCO_t2i.zip",
+    # "MSCOCO i2t ": "images_zip/MSCOCO_i2t.zip",
+    # "NIGHTS": "images_zip/NIGHTS.zip",
+    # "WebQA": "images_zip/WebQA.zip",
 }
 
 dataset = "TIGER-Lab/MMEB-train"
