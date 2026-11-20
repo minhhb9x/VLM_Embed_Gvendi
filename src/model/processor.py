@@ -599,6 +599,92 @@ def Qwen2_VL_process_fn(model_inputs: dict, processor: Qwen2VLProcessor, max_len
 
     return inputs
 
+def Qwen25_VL_process_fn(model_inputs: dict, processor: Qwen2VLProcessor, max_length=None, square_padding=False):
+    # TODO: set separate max_len for text/visual inputs, currently max_length is only applied to text-only data
+    input_ids, pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw = [], [], [], [], []
+    texts, visual_inputs = model_inputs['text'], model_inputs['images']
+    eos_token = getattr(processor.tokenizer, "eos_token", None)
+    if eos_token:
+        texts = [
+            text if text.rstrip().endswith(eos_token) else text + eos_token
+            for text in texts
+        ]
+    image_exists = False
+    vlm_image_token, vlm_video_token = VLM_IMAGE_TOKENS[QWEN2_VL], VLM_VIDEO_TOKENS[QWEN2_VL]
+    # import ipdb; ipdb.set_trace()
+    # 1. iterate each pair and process (since processors do not support batch processing)
+    # print("texts:", texts)
+    # print("visual_inputs types:", [type(img) for img in visual_inputs])
+    for text, images in zip(texts, visual_inputs):
+        # print(f"Processing text: {text}")
+        if images is None or (type(images)==list and any(i is None for i in images)):
+            # all images must be valid
+            inputs = processor(text=[text], images=None, return_tensors="pt", max_length=max_length, truncation=True)
+            input_id = inputs["input_ids"].squeeze().tolist()
+            if isinstance(input_id, int):
+                # in case of empty string, only BOS is included
+                input_id = [input_id]
+            input_ids.append(input_id)
+            pixel_values.append(None)
+            image_grid_thw.append(None)
+            pixel_values_videos.append(None)
+            video_grid_thw.append(None)
+        else:
+            if vlm_image_token in text:
+                if isinstance(images, PIL.Image.Image):
+                    # images is a single image
+                    images = [images]
+                if square_padding:
+                    for iid, image in enumerate(images):
+                        images[iid] = expand2square(image, background_color=tuple(int(x*255) 
+                                                                for x in [0, 0, 0]))
+                for iid, image in enumerate(images):
+                    # rare case in MMEB eval: resize to 28*28 if either w or h is smaller than 28
+                    if image.size[0] < 28 or image.size[1] < 28:
+                        image = image.resize((56, 56))
+                        images[iid] = image
+                # for image in images:
+                #     print(f"Image size (w, h): {image.size}, mode: {image.mode}, type: {type(image)}")
+                inputs = processor(text=[text], images=images, return_tensors="pt", max_length=None, truncation=False, input_data_format=ChannelDimension.LAST)
+            elif vlm_video_token in text:
+                # TODO: check text/video data validity
+                inputs = processor(text=[text], videos=[images], return_tensors="pt", max_length=None, truncation=False, input_data_format=ChannelDimension.LAST)
+            else:
+                raise NotImplementedError
+            input_ids.append(inputs["input_ids"].squeeze().tolist())
+            if 'pixel_values' in inputs:
+                pixel_values.append(inputs['pixel_values'])
+                image_grid_thw.append(inputs['image_grid_thw'])
+                pixel_values_videos.append(None)
+                video_grid_thw.append(None)
+            else:
+                pixel_values.append(None)
+                image_grid_thw.append(None)
+                pixel_values_videos.append(inputs['pixel_values_videos'])
+                video_grid_thw.append(inputs['video_grid_thw'])
+
+    # 2. padding inputs
+    batch_encoding = processor.tokenizer.pad({'input_ids': input_ids}, return_tensors="pt")
+    # print(f"Padded input_ids: {batch_encoding['input_ids']}")
+    input_ids, attention_mask = batch_encoding['input_ids'], batch_encoding['attention_mask']
+    # manually enforce long type due to:
+    # (1) [rank7]: RuntimeError: Expected tensor for argument #1 'indices' to have one of the following scalar types: Long, Int; but got torch.cuda.FloatTensor instead (while checking arguments for embedding)
+    # (2) [rank7]:   File "/fsx/home/ruimeng/project/VLM2Vec/src/model.py", line 45, in _pooling
+    #     [rank7]:     reps = last_hidden_state[
+    #     [rank7]: IndexError: tensors used as indices must be long, int, byte or bool tensors
+    inputs = {
+        'input_ids': input_ids.long(),
+        'attention_mask': attention_mask.long(), 
+        'texts': texts,
+        'images': visual_inputs,
+    }
+    inputs['pixel_values'] = pixel_values
+    inputs['image_grid_thw'] = image_grid_thw
+    inputs['pixel_values_videos'] = pixel_values_videos
+    inputs['video_grid_thw'] = video_grid_thw
+
+    return inputs
+
 def Gme_process_fn(model_inputs: dict, processor: Qwen2VLProcessor, max_length=None):
     inputs = {
         'texts': model_inputs['text'],
@@ -1082,7 +1168,7 @@ process_vlm_inputs_fns = {
     LLAVA_NEXT: Llava_NEXT_process_fn,
     INTERN_VL3: Intern_VL3_process_fn,
     QWEN2_VL: Qwen2_VL_process_fn,
-    QWEN2_5_VL: Qwen2_VL_process_fn,
+    QWEN2_5_VL: Qwen25_VL_process_fn,
     QWEN2_VL_TOKENSELECTION: Qwen2_VL_TokenSelection_process_fn,
     QWEN2_5_VL_TOKENSELECTION: Qwen2_VL_TokenSelection_process_fn,
     INTERNVIDEO2: InternVideo2_process_fn,
