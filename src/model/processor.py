@@ -226,16 +226,33 @@ def load_processor(model_args, data_args=None):
             uimask_ratio=model_args.uimask_ratio, uimask_rand=model_args.uimask_rand
         )
     elif model_args.model_backbone == QWEN2_5_VL:
-        from src.model.vlm_backbone.qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
-        from src.model.vlm_backbone.qwen2_5_vl.image_processing_qwen2_5_vl import Qwen2_5_VLImageProcessor
-        from src.model.vlm_backbone.qwen2_vl.tokenization_qwen2_fast import Qwen2TokenizerFast
-        from transformers import AutoProcessor
+        from transformers import (
+            Qwen2_5_VLProcessor,
+            Qwen2TokenizerFast,
+            Qwen2VLImageProcessor,
+            Qwen2VLVideoProcessor,
+        )
+
+        model_name_or_path = PeftConfig.from_pretrained(model_args.model_name).base_model_name_or_path if(model_args.init_lora_model) else model_name_or_path
         print(f">>>>>>>>>>>>>>>>>>>>>>>> Processor 2.5 {model_name_or_path}")
-        # image_processor = Qwen2_5_VLImageProcessor.from_pretrained(model_name_or_path)
-        # tokenizer = Qwen2TokenizerFast.from_pretrained(model_name_or_path)
-        # processor = Qwen2_5_VLProcessor.from_pretrained(model_name_or_path, image_processor=image_processor, tokenizer=tokenizer)
-        # processor = Qwen2_5_VLProcessor.from_pretrained(model_name_or_path, image_processor=autoprocessor.image_processor, tokenizer=autoprocessor.tokenizer)
-        processor = AutoProcessor.from_pretrained(model_name_or_path, padding_side='left', max_pixels=data_args.resize_max_pixels, min_pixels = data_args.resize_min_pixels)
+        image_processor_config, _ = Qwen2VLImageProcessor.get_image_processor_dict(model_name_or_path)
+        image_processor_config.setdefault(
+            "size",
+            {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280},
+        )
+        image_processor = Qwen2VLImageProcessor.from_dict(image_processor_config)
+        if data_args is not None:
+            image_processor.min_pixels = data_args.resize_min_pixels
+            image_processor.max_pixels = data_args.resize_max_pixels
+        video_processor = Qwen2VLVideoProcessor.from_pretrained(model_name_or_path)
+        tokenizer = Qwen2TokenizerFast.from_pretrained(model_name_or_path)
+        tokenizer.padding_side = "left"
+        processor = Qwen2_5_VLProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            chat_template=getattr(tokenizer, "chat_template", None),
+        )
     elif model_args.model_backbone == INTERN_VL3:
         from transformers import AutoModel, AutoTokenizer
         print(f">>>>>>>>>>>>>>>>>>>>>>>> Tokenizer InternVL3 {model_name_or_path}")

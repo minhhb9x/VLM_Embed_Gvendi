@@ -1,7 +1,7 @@
 import os
 from src.arguments import ModelArguments, DataArguments
 from src.model.model import MMEBModel
-from src.model.processor import load_processor, QWEN2_VL, VLM_IMAGE_TOKENS, LLAVA_ONEVISION, \
+from src.model.processor import load_processor, QWEN2_VL, VLM_IMAGE_TOKENS, LLAVA_ONEVISION, QWEN2_5_VL, \
     Qwen2_VL_process_fn, LLAVA_QWEN2, FastVLM_process_fn, Llava_ONEVISION_process_fn, QWEN3_VL, Qwen3_VL_process_fn
 from src.utils import batch_to_device
 from PIL import Image
@@ -28,15 +28,15 @@ from transformers.image_transforms import (
 # token_img = QWEN2_VL
 
 
-model_args = ModelArguments(
-    model_name='apple/FastVLM-0.5B',
-    pooling='last',
-    normalize=True,
-    model_backbone=LLAVA_QWEN2,
-    lora=True,
-)
-process_fn = FastVLM_process_fn
-token_img = LLAVA_QWEN2
+# model_args = ModelArguments(
+#     model_name='apple/FastVLM-0.5B',
+#     pooling='last',
+#     normalize=True,
+#     model_backbone=LLAVA_QWEN2,
+#     lora=True,
+# )
+# process_fn = FastVLM_process_fn
+# token_img = LLAVA_QWEN2
 
 
 # model_args = ModelArguments(
@@ -66,11 +66,25 @@ token_img = LLAVA_QWEN2
 # token_img = QWEN3_VL
 
 
+model_args = ModelArguments(
+    model_name='Qwen/Qwen2.5-VL-3B-Instruct',
+    pooling='last',
+    normalize=True,
+    model_backbone=QWEN2_5_VL,
+    lora=True,
+)
+process_fn = Qwen2_VL_process_fn
+token_img = QWEN2_5_VL
+
 
 processor = load_processor(model_args, None)
-model = MMEBModel.build(model_args)
-model = model.to('cuda:0', dtype=torch.bfloat16)
-model.eval()
+# model = MMEBModel.build(model_args)
+# model = model.to('cuda:0', dtype=torch.bfloat16)
+# model.eval()
+
+print(processor.image_processor.min_pixels)
+print(processor.image_processor.max_pixels)
+print(processor.image_processor.size)
 
 processor_inputs = {
     "text": [f'Represent the given image with the following question: What is in the image {VLM_IMAGE_TOKENS[token_img]}',
@@ -85,16 +99,16 @@ inputs = process_fn(
     )
 inputs = batch_to_device(inputs, "cuda")
 
-# decoded_texts = processor.tokenizer.batch_decode(
-#     inputs["input_ids"].cpu(),
-#     skip_special_tokens=False,
-#     clean_up_tokenization_spaces=False,
-# )
+decoded_texts = processor.tokenizer.batch_decode(
+    inputs["input_ids"].cpu(),
+    skip_special_tokens=False,
+    clean_up_tokenization_spaces=False,
+)
 
-# print(inputs.keys())
-# for i, text in enumerate(decoded_texts):
-#     print(f"\n{'=' * 30} SAMPLE {i} {'=' * 30}")
-#     print(text)
+print(inputs.keys())
+for i, text in enumerate(decoded_texts):
+    print(f"\n{'=' * 30} SAMPLE {i} {'=' * 30}")
+    print(text)
 
 
 # tok = processor.tokenizer
@@ -125,6 +139,6 @@ inputs = batch_to_device(inputs, "cuda")
 #         tok.convert_ids_to_tokens(ids[-5:]),
 #     )
 
-output = model.encode_input(inputs)[0]
+# output = model.encode_input(inputs)[0]
 
-print(output.shape)
+# print(output.shape)

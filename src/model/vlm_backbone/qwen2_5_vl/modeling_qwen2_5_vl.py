@@ -1396,6 +1396,7 @@ class Qwen2_5_VLCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
+    batch_image_embeds: Optional[List[torch.FloatTensor]] = None
 
 
 QWEN2_5_VL_INPUTS_DOCSTRING = r"""
@@ -1754,6 +1755,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        batch_image_embeds = None
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
 
@@ -1791,6 +1793,13 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
                     image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds_w_image = inputs_embeds_w_image.masked_scatter(image_mask, image_embeds)
                     merged_inputs_embeds.append(inputs_embeds_w_image)
+                    # Match Qwen2-VL: one tensor per image-bearing sample, in batch order.
+                    batch_image_embeds = []
+                    cur = 0
+                    for b in range(image_mask.size(0)):
+                        num_image_tokens = int(image_mask[b, :, 0].sum().item())
+                        batch_image_embeds.append(image_embeds[cur : cur + num_image_tokens])
+                        cur += num_image_tokens
                 if len(idx_wo_image):
                     inputs_embeds_wo_image = torch.stack([inputs_embeds[i] for i in idx_wo_image])
                     merged_inputs_embeds.append(inputs_embeds_wo_image)
@@ -1914,6 +1923,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
+            batch_image_embeds=batch_image_embeds,
         )
 
     def prepare_inputs_for_generation(
