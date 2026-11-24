@@ -65,10 +65,13 @@ class PGA2(PGA):
             return student_outputs["qry"][0].new_zeros(())
 
         sv, st = torch.stack(stu_img), torch.stack(stu_txt)
+
         img_proj = model_wrapper.projectors["t2s_img"]
         txt_proj = model_wrapper.projectors["t2s_txt"]
+
         tv = img_proj(torch.stack(tea_img).to(next(img_proj.parameters())))
         tt = txt_proj(torch.stack(tea_txt).to(next(txt_proj.parameters())))
+
         intra_loss = self.mi_loss(sv, tv) + self.mi_loss(st, tt)
         inter_loss = self.mi_loss(sv, tt) + self.mi_loss(st, tv)
         return intra_loss + inter_loss
@@ -92,9 +95,20 @@ class PGA2(PGA):
         contrastive_loss = self.loss_fn(scores / model_wrapper.temperature, target)
 
         mse_loss = contrastive_loss.new_zeros(())
+        proj = model_wrapper.projectors["t2s"]
+        proj_param = next(proj.parameters())
+
+        proj_teacher_qry_reps = proj(teacher_qry.to(proj_param))
+        proj_teacher_pos_reps = proj(teacher_pos.to(proj_param))
+
+        mse_loss = (
+            F.mse_loss(student_qry.float(), proj_teacher_qry_reps.float())
+            + F.mse_loss(student_pos.float(), proj_teacher_pos_reps.float())
+        )
+
         scl_loss = contrastive_loss.new_zeros(())
         # Enable t2s_img and t2s_txt in the projector config before uncommenting.
-        # scl_loss = self._scl_loss(model_wrapper, batch, student_outputs)
+        scl_loss = self._scl_loss(model_wrapper, batch, student_outputs)
 
         pga_loss = self.pga_loss(
             torch.cat((student_qry, student_pos), dim=0),
